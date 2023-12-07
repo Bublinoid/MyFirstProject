@@ -28,7 +28,9 @@ import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static java.awt.SystemColor.text;
 
@@ -43,6 +45,8 @@ public class MyTelegramBotApi {
     private GoogleCloudStorageUploader storageUploader;
 
     private final FeedbackService feedbackService;
+
+    private Map<Long, Boolean> awaitingFeedback = new HashMap<>();
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -116,6 +120,23 @@ public class MyTelegramBotApi {
         processUpdates();
     }
 
+    private void sendPhotos(long chatId) {
+        try {
+            List<String> photoUrls = new ArrayList<>();
+            photoUrls.add(photoUrl1);
+            photoUrls.add(photoUrl2);
+            photoUrls.add(photoUrl3);
+            photoUrls.add(photoUrl4);
+
+            for (String photoUrl : photoUrls) {
+                sendPhoto(String.valueOf(chatId), photoUrl);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            sendMessage(String.valueOf(chatId), "Произошла ошибка при отправке фотографий.");
+        }
+    }
+
     public void processUpdates() {
         String url = baseUrl + "/getUpdates?offset=" + offset + "&timeout=30";
 
@@ -163,6 +184,8 @@ public class MyTelegramBotApi {
                             } else if ("/write_feedback".equals(text)) {
                                 System.out.println("Received /write_feedback command");
                                 handleWriteFeedbackCommand(String.valueOf(chatId));
+                                awaitingFeedback.put(chatId, true);
+                                sendMessage(String.valueOf(chatId), "Спасибо, что хотите оставить отзыв! Пожалуйста, напишите свой отзыв:");
                             } else if (text.startsWith("/make_an_appointment")) {
                                 System.out.println("Received /make_an_appointment command");
                                 String[] commandParts = text.split(" ");
@@ -183,23 +206,6 @@ public class MyTelegramBotApi {
             }
         } catch (IOException e) {
             e.printStackTrace();
-        }
-    }
-
-    private void sendPhotos(long chatId) {
-        try {
-            List<String> photoUrls = new ArrayList<>();
-            photoUrls.add(photoUrl1);
-            photoUrls.add(photoUrl2);
-            photoUrls.add(photoUrl3);
-            photoUrls.add(photoUrl4);
-
-            for (String photoUrl : photoUrls) {
-                sendPhoto(String.valueOf(chatId), photoUrl);
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-            sendMessage(String.valueOf(chatId), "Произошла ошибка при отправке фотографий.");
         }
     }
 
@@ -312,6 +318,8 @@ public class MyTelegramBotApi {
             String url = baseUrl + "/sendMessage";
             String requestBody = "chat_id=" + chatId + "&text=" + URLEncoder.encode(text, String.valueOf(StandardCharsets.UTF_8));
 
+            System.out.println("Request Body: " + requestBody);
+
             URL urlObject = new URL(url);
             HttpURLConnection connection = (HttpURLConnection) urlObject.openConnection();
             connection.setRequestMethod("POST");
@@ -319,8 +327,8 @@ public class MyTelegramBotApi {
             connection.setDoOutput(true);
 
             try (DataOutputStream dos = new DataOutputStream(connection.getOutputStream())) {
-                dos.writeBytes(requestBody);
-                dos.flush();
+                byte[] input = requestBody.getBytes("utf-8");
+                dos.write(input, 0, input.length);
             }
 
             int responseCode = connection.getResponseCode();
@@ -522,11 +530,11 @@ public class MyTelegramBotApi {
         if (chatId != 0) {
             String welcomeMessage = "Спасибо, что хотите оставить отзыв! Пожалуйста, напишите свой отзыв:";
             sendMessageWithHTML(String.valueOf(chatId), welcomeMessage);
+            awaitingFeedback.put(chatId, true);
         } else {
             System.out.println("Chat ID not found or invalid");
         }
     }
-
 
     @PostMapping("/get")
     public void handleFeedbackCommand(@RequestBody String requestBody) {
@@ -542,29 +550,48 @@ public class MyTelegramBotApi {
         sendMessageWithHTML(String.valueOf(chatId), message.toString());
     }
 
-    @PostMapping("/save")
     public void saveFeedback(@RequestBody String requestBody) {
-        long chatId = extractChatId(requestBody);
-        String username = extractUsername(requestBody);
-        String message = extractMessage(requestBody);
+        try {
+            long chatId = extractChatId(requestBody);
+            String username = extractUsername(requestBody);
+            String message = extractMessage(requestBody);
 
-        Feedback feedback = new Feedback();
-        feedback.setChatId(chatId);
-        feedback.setUsername(username);
-        feedback.setMessage(message);
+            if (chatId != 0 && username != null && !username.isEmpty() && message != null) {
+                Feedback feedback = new Feedback();
+                feedback.setChatId(chatId);
+                feedback.setUsername(username);
+                feedback.setMessage(message);
 
-        feedbackService.saveFeedback(feedback);
+                feedbackService.saveFeedback(feedback);
+
+                System.out.println("Отзыв успешно сохранен: " + feedback);
+
+                // Проверяем, ожидает ли пользователь отзыв
+                if (awaitingFeedback.containsKey(chatId) && awaitingFeedback.get(chatId)) {
+                    // Отправляем сообщение об успешном сохранении отзыва
+                    sendMessage(String.valueOf(chatId), "Отзыв успешно сохранен: " + message);
+                    // Сбрасываем состояние ожидания для данного пользователя
+                    awaitingFeedback.put(chatId, false);
+                }
+            } else {
+                System.out.println("Некорректные данные для сохранения отзыва");
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            System.out.println("Произошла ошибка при сохранении отзыва");
+        }
     }
 
     private long extractChatId(String requestBody) {
         try {
             JsonNode jsonNode = objectMapper.readTree(requestBody);
-            JsonNode messageNode = jsonNode.get("message");
+            System.out.println("JsonNode: " + jsonNode);
 
+            JsonNode messageNode = jsonNode.get("message");
+            System.out.println("MessageNode: " + messageNode);
 
             if (messageNode != null) {
                 JsonNode chatNode = messageNode.get("chat");
-
 
                 if (chatNode != null && chatNode.has("id") && chatNode.get("id").isNumber()) {
                     return chatNode.get("id").asLong();
@@ -578,11 +605,35 @@ public class MyTelegramBotApi {
     }
 
     private String extractUsername(String requestBody) {
+        try {
+            JsonNode jsonNode = objectMapper.readTree(requestBody);
+            JsonNode messageNode = jsonNode.get("message");
+
+            if (messageNode != null) {
+                JsonNode fromNode = messageNode.get("from");
+
+                if (fromNode != null && fromNode.has("username")) {
+                    return fromNode.get("username").asText();
+                }
+            }
+        } catch (IOException | NullPointerException e) {
+            e.printStackTrace();
+        }
 
         return "";
     }
 
     private String extractMessage(String requestBody) {
+        try {
+            JsonNode jsonNode = objectMapper.readTree(requestBody);
+            JsonNode messageNode = jsonNode.get("message");
+
+            if (messageNode != null && messageNode.has("text")) {
+                return messageNode.get("text").asText();
+            }
+        } catch (IOException | NullPointerException e) {
+            e.printStackTrace();
+        }
 
         return "";
     }

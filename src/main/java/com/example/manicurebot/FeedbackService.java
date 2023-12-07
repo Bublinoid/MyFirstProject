@@ -16,10 +16,21 @@ public class FeedbackService {
     }
 
     public void saveFeedback(Feedback feedback) {
-        feedbackRepository.save(feedback);
+        if (isValidFeedback(feedback)) {
+            feedbackRepository.save(feedback);
+        } else {
+
+        }
     }
+    private boolean isValidFeedback(Feedback feedback) {
+        return feedback != null && feedback.getUsername() != null && !feedback.getUsername().isEmpty()
+                && feedback.getMessage() != null && !feedback.getMessage().isEmpty();
+    }
+
+
 
     public List<Feedback> getFeedbackByChatId(Long chatId) {
         return feedbackRepository.findByChatId(chatId);
     }
 }
+
