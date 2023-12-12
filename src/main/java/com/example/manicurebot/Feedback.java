@@ -35,4 +35,7 @@ public class Feedback {
     public void setChatId(Long chatId) {
         this.chatId = chatId;
     }
+
+
 }
+

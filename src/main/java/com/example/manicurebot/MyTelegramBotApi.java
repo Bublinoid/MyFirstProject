@@ -3,21 +3,21 @@ package com.example.manicurebot;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.cloud.storage.*;
-import org.apache.commons.lang3.StringEscapeUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.*;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.util.MultiValueMap;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.web.util.UriComponentsBuilder;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardMarkup;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardButton;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardRow;
 import org.telegram.telegrambots.meta.api.objects.User;
-import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
 
 import java.io.*;
@@ -27,12 +27,7 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.LocalTime;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
-import static java.awt.SystemColor.text;
+import java.util.*;
 
 
 @Component
@@ -46,7 +41,13 @@ public class MyTelegramBotApi {
 
     private final FeedbackService feedbackService;
 
+    private Set<Long> processedUpdates = new HashSet<>();
+
+    private final RestTemplate restTemplate = new RestTemplate();
+
     private Map<Long, Boolean> awaitingFeedback = new HashMap<>();
+    private Map<Long, String> feedbackTextMap = new HashMap<>();
+    private Map<Long, String> feedbackChatMap = new HashMap<>();
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -152,7 +153,6 @@ public class MyTelegramBotApi {
                 while ((line = reader.readLine()) != null) {
                     response.append(line);
                 }
-
                 if (connection.getResponseCode() == 200) {
                     ObjectMapper objectMapper = new ObjectMapper();
                     JsonNode rootNode = objectMapper.readTree(response.toString());
@@ -160,43 +160,53 @@ public class MyTelegramBotApi {
                     if (rootNode.has("result")) {
                         for (JsonNode updateNode : rootNode.get("result")) {
                             long updateId = updateNode.get("update_id").asLong();
-                            offset = Math.max(offset, updateId + 1);
-                            long chatId = updateNode.get("message").get("chat").get("id").asLong();
-                            String text = updateNode.get("message").get("text").asText();
 
-                            System.out.println("Received update: " + text);
+                            if (!processedUpdates.contains(updateId)) {
+                                processedUpdates.add(updateId);
 
-                            if ("/start".equals(text)) {
-                                System.out.println("Received /start command");
-                                sendStartMessage(chatId);
-                            } else if ("/help".equals(text)) {
-                                System.out.println("Received /help command");
-                                sendHelpMessage(chatId);
-                            } else if ("/photos".equals(text)) {
-                                System.out.println("Received /photos command");
-                                sendPhotos(chatId);
-                            } else if ("/price".equals(text)) {
-                                System.out.println("Received /price command");
-                                sendPriceMessage(chatId);
-                            } else if ("/feedback".equals(text)) {
-                                System.out.println("Received /feedback command");
-                                handleFeedbackCommand(String.valueOf(chatId));
-                            } else if ("/write_feedback".equals(text)) {
-                                System.out.println("Received /write_feedback command");
-                                handleWriteFeedbackCommand(String.valueOf(chatId));
-                                awaitingFeedback.put(chatId, true);
-                                sendMessage(String.valueOf(chatId), "Спасибо, что хотите оставить отзыв! Пожалуйста, напишите свой отзыв:");
-                            } else if (text.startsWith("/make_an_appointment")) {
-                                System.out.println("Received /make_an_appointment command");
-                                String[] commandParts = text.split(" ");
-                                if (commandParts.length == 2) {
-                                    String selectedDate = commandParts[1];
-                                    handleSelectedDate(chatId, selectedDate);
+                                offset = Math.max(offset, updateId + 1);
+
+                                JsonNode chatNode = updateNode.get("message").get("chat");
+                                long chatId = chatNode.get("id").asLong();
+                                String text = updateNode.get("message").get("text").asText();
+
+                                System.out.println("Received update: " + text);
+
+                                if ("/start".equals(text)) {
+                                    System.out.println("Received /start command");
+                                    sendStartMessage(chatId);
+                                } else if ("/help".equals(text)) {
+                                    System.out.println("Received /help command");
+                                    sendHelpMessage(chatId);
+                                } else if ("/photos".equals(text)) {
+                                    System.out.println("Received /photos command");
+                                    sendPhotos(chatId);
+                                } else if ("/price".equals(text)) {
+                                    System.out.println("Received /price command");
+                                    sendPriceMessage(chatId);
+                                } else if ("/feedback".equals(text)) {
+                                    System.out.println("Received /feedback command");
+                                    System.out.println("Received update for chatId: " + chatId);
+                                    handleFeedbackCommand(String.valueOf(updateNode));
+                                } else if ("/write_feedback".equals(text)) {
+                                    System.out.println("Received /write_feedback command");
+                                    awaitingFeedback.put(chatId, true);
+                                    sendMessage(String.valueOf(chatId), "Спасибо, что хотите оставить отзыв! Пожалуйста, напишите свой отзыв:");
+                                } else if (text.startsWith("/make_an_appointment")) {
+                                    System.out.println("Received /make_an_appointment command");
+                                    String[] commandParts = text.split(" ");
+                                    if (commandParts.length == 2) {
+                                        String selectedDate = commandParts[1];
+                                        handleSelectedDate(chatId, selectedDate);
+                                    } else {
+                                        sendMessage(String.valueOf(chatId), "Неправильный формат команды. Используйте /make_an_appointment <дата>");
+                                    }
+                                } else if (awaitingFeedback.containsKey(chatId) && awaitingFeedback.get(chatId)) {
+                                    handleWriteFeedbackCommand(response.toString());
+                                    awaitingFeedback.put(chatId, false);
                                 } else {
-                                    sendMessage(String.valueOf(chatId), "Неправильный формат команды. Используйте /make_an_appointment <дата>");
+                                    System.out.println("Unknown command: " + text);
                                 }
-                            } else {
-                                System.out.println("Unknown command: " + text);
                             }
                         }
                     }
@@ -208,6 +218,7 @@ public class MyTelegramBotApi {
             e.printStackTrace();
         }
     }
+
 
     private void sendPhoto(String chatId, String photoUrl) {
         String url = baseUrl + "/sendPhoto";
@@ -358,8 +369,6 @@ public class MyTelegramBotApi {
         }
     }
 
-
-
     public void handleMakeAppointmentCommand(long chatId) {
         sendMessage(String.valueOf(chatId), "Выберите дату для записи на маникюр:");
 
@@ -386,8 +395,6 @@ public class MyTelegramBotApi {
     public void handleSelectedDate(long chatId, String selectedDate) {
 
         LocalDate date = LocalDate.parse(selectedDate);
-
-
         List<String> availableTimes = appointmentService.getAvailableTimes(date);
 
         ReplyKeyboardMarkup keyboardMarkup = new ReplyKeyboardMarkup();
@@ -405,242 +412,365 @@ public class MyTelegramBotApi {
 
         keyboardMarkup.setKeyboard(keyboard);
 
-
         sendReplyKeyboard(chatId, "Выберите время:", keyboardMarkup);
     }
+        public void handleSelectedTime(long chatId, String selectedTime, User user) {
 
+            LocalTime time = LocalTime.parse(selectedTime);
+            boolean success = appointmentService.makeAppointment(user, LocalDate.now(), time);
 
-    public void handleSelectedTime(long chatId, String selectedTime, User user) {
-
-        LocalTime time = LocalTime.parse(selectedTime);
-
-
-        boolean success = appointmentService.makeAppointment(user, LocalDate.now(), time);
-
-        if (success) {
-            sendMessage(String.valueOf(chatId), "Вы успешно записаны на маникюр!");
-        } else {
-            sendMessage(String.valueOf(chatId), "Извините, выбранное время уже занято. Пожалуйста, выберите другое время.");
-        }
-    }
-    private void sendReplyKeyboard(long chatId, String text, ReplyKeyboardMarkup keyboardMarkup) {
-        SendMessage message = new SendMessage();
-        message.setChatId(String.valueOf(chatId));
-        message.setText(text);
-        message.setReplyMarkup(keyboardMarkup);
-
-
-        execute(message);
-    }
-
-    private void execute(SendMessage message) {
-        String url = baseUrl + "/sendMessage";
-        String requestBody = "chat_id=" + message.getChatId() + "&text=" + message.getText();
-
-        try {
-            URL urlObject = new URL(url);
-            HttpURLConnection connection = (HttpURLConnection) urlObject.openConnection();
-            connection.setRequestMethod("POST");
-            connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
-            connection.setDoOutput(true);
-
-            try (DataOutputStream dos = new DataOutputStream(connection.getOutputStream())) {
-                byte[] input = requestBody.getBytes("utf-8");
-                dos.write(input, 0, input.length);
-            }
-
-            int responseCode = connection.getResponseCode();
-            System.out.println("Response Code: " + responseCode);
-
-            if (responseCode == HttpURLConnection.HTTP_OK) {
-                try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()))) {
-                    StringBuilder response = new StringBuilder();
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                        response.append(line);
-                    }
-                    System.out.println("Response Body: " + response.toString());
-                }
+            if (success) {
+                sendMessage(String.valueOf(chatId), "Вы успешно записаны на маникюр!");
             } else {
-                try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getErrorStream()))) {
-                    StringBuilder errorResponse = new StringBuilder();
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                        errorResponse.append(line);
-                    }
-                    System.out.println("Error Response: " + errorResponse.toString());
-                }
+                sendMessage(String.valueOf(chatId), "Извините, выбранное время уже занято. Пожалуйста, выберите другое время.");
             }
-        } catch (IOException e) {
-            e.printStackTrace();
         }
-    }
+        private void sendReplyKeyboard(long chatId, String text, ReplyKeyboardMarkup keyboardMarkup) {
+            SendMessage message = new SendMessage();
+            message.setChatId(String.valueOf(chatId));
+            message.setText(text);
+            message.setReplyMarkup(keyboardMarkup);
 
+            execute(message);
+        }
 
+        private void execute(SendMessage message) {
+            String url = baseUrl + "/sendMessage";
+            String requestBody = "chat_id=" + message.getChatId() + "&text=" + message.getText();
 
-    private void sendPriceMessage(long chatId) {
-        String messageForPrice = "<b>-> Комплекс:</b> Снятие + маникюр + покрытие гель лаком + уход 1700 рублей.\n\n" +
-                "-> Маникюр комбинированный <b>500</b> рублей.\n" +
-                "-> Спа для рук <b>300</b> рублей.\n" +
-                "-> Фрэнч <b>400</b> рублей.\n" +
-                "-> Дизайн от <b>50</b> рублей за ноготь.";
-        sendMessageWithHTML(String.valueOf(chatId), messageForPrice);
-    }
+            try {
+                URL urlObject = new URL(url);
+                HttpURLConnection connection = (HttpURLConnection) urlObject.openConnection();
+                connection.setRequestMethod("POST");
+                connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+                connection.setDoOutput(true);
+
+                try (DataOutputStream dos = new DataOutputStream(connection.getOutputStream())) {
+                    byte[] input = requestBody.getBytes("utf-8");
+                    dos.write(input, 0, input.length);
+                }
+
+                int responseCode = connection.getResponseCode();
+                System.out.println("Response Code: " + responseCode);
+
+                if (responseCode == HttpURLConnection.HTTP_OK) {
+                    try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()))) {
+                        StringBuilder response = new StringBuilder();
+                        String line;
+                        while ((line = reader.readLine()) != null) {
+                            response.append(line);
+                        }
+                        System.out.println("Response Body: " + response.toString());
+                    }
+                } else {
+                    try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getErrorStream()))) {
+                        StringBuilder errorResponse = new StringBuilder();
+                        String line;
+                        while ((line = reader.readLine()) != null) {
+                            errorResponse.append(line);
+                        }
+                        System.out.println("Error Response: " + errorResponse.toString());
+                    }
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+
+        private void sendPriceMessage(long chatId) {
+            String messageForPrice = "<b>-> Комплекс:</b> Снятие + маникюр + покрытие гель лаком + уход 1700 рублей.\n\n" +
+                    "-> Маникюр комбинированный <b>500</b> рублей.\n" +
+                    "-> Спа для рук <b>300</b> рублей.\n" +
+                    "-> Фрэнч <b>400</b> рублей.\n" +
+                    "-> Дизайн от <b>50</b> рублей за ноготь.";
+            sendMessageWithHTML(String.valueOf(chatId), messageForPrice);
+        }
 
     private void sendMessageWithHTML(String chatId, String htmlMessage) {
         try {
             String url = baseUrl + "/sendMessage";
             String escapedHtmlMessage = URLEncoder.encode(htmlMessage, String.valueOf(StandardCharsets.UTF_8));
             String requestBody = "chat_id=" + chatId + "&text=" + escapedHtmlMessage + "&parse_mode=HTML";
+            System.out.println("Sending message to chatId: " + chatId);
+            System.out.println("Message: " + escapedHtmlMessage);
 
-            URL urlObject = new URL(url);
-            HttpURLConnection connection = (HttpURLConnection) urlObject.openConnection();
-            connection.setRequestMethod("POST");
-            connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8");
-            connection.setDoOutput(true);
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
 
-            try (OutputStream os = connection.getOutputStream()) {
-                os.write(requestBody.getBytes(StandardCharsets.UTF_8));
+            HttpEntity<String> entity = new HttpEntity<>(requestBody, headers);
+
+            ResponseEntity<String> response = restTemplate.postForEntity(url, entity, String.class);
+
+            HttpStatus responseCode = response.getStatusCode();
+            System.out.println("Response Code: " + responseCode);
+
+            if (!responseCode.is2xxSuccessful()) {
+                String errorResponse = response.getBody();
+                System.out.println("Error Response: " + errorResponse);
+            } else {
+                String responseBody = response.getBody();
+                System.out.println("Response Body: " + responseBody);
             }
-
-            try (InputStream is = connection.getInputStream()) {
-                // Просто прочитаем весь поток в строку, чтобы избежать ошибок
-                try (BufferedReader reader = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
-                    StringBuilder response = new StringBuilder();
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                        response.append(line);
-                    }
-                    System.out.println("Response Body: " + response.toString());
-                }
-            }
-
-            connection.disconnect();
-        } catch (IOException e) {
+        } catch (UnsupportedEncodingException e) {
             e.printStackTrace();
         }
     }
+    private void logRequestBody(String requestBody) {
+        System.out.println("Received request body: " + requestBody);
+    }
 
-
-
-    @PostMapping("/write_feedback")
     public void handleWriteFeedbackCommand(@RequestBody String requestBody) {
-        long chatId = extractChatId(requestBody);
+        logRequestBody(requestBody);
 
-        if (chatId != 0) {
-            String welcomeMessage = "Спасибо, что хотите оставить отзыв! Пожалуйста, напишите свой отзыв:";
-            sendMessageWithHTML(String.valueOf(chatId), welcomeMessage);
-            awaitingFeedback.put(chatId, true);
-        } else {
-            System.out.println("Chat ID not found or invalid");
-        }
-    }
-
-    @PostMapping("/get")
-    public void handleFeedbackCommand(@RequestBody String requestBody) {
-        long chatId = extractChatId(requestBody);
-        List<Feedback> feedbackList = feedbackService.getFeedbackByChatId(chatId);
-
-        StringBuilder message = new StringBuilder("<b>Отзывы:</b>\n\n");
-        for (Feedback feedback : feedbackList) {
-            message.append("<strong>").append(feedback.getUsername()).append("</strong>: ")
-                    .append(feedback.getMessage()).append("\n");
-        }
-
-        sendMessageWithHTML(String.valueOf(chatId), message.toString());
-    }
-
-    public void saveFeedback(@RequestBody String requestBody) {
         try {
-            long chatId = extractChatId(requestBody);
-            String username = extractUsername(requestBody);
-            String message = extractMessage(requestBody);
+            JsonNode jsonNode = objectMapper.readTree(requestBody);
 
-            if (chatId != 0 && username != null && !username.isEmpty() && message != null) {
+            if (jsonNode.has("result")) {
+                JsonNode resultNode = jsonNode.get("result");
+
+                if (resultNode.isArray()) {
+                    for (JsonNode updateNode : resultNode) {
+                        if (updateNode.has("message")) {
+                            JsonNode messageNode = updateNode.get("message");
+
+                            if (messageNode.has("chat")) {
+                                JsonNode chatNode = messageNode.get("chat");
+
+                                long chatId = chatNode.get("id").asLong();
+                                String feedbackText = extractFeedbackText(updateNode);
+
+                                System.out.println("ChatID: " + chatId);
+                                System.out.println("Feedback Text: " + feedbackText);
+
+                                if (chatId != 0) {
+                                    if (awaitingFeedback.containsKey(chatId) && awaitingFeedback.get(chatId)) {
+                                        awaitingFeedback.put(chatId, false);
+
+                                        if (!feedbackText.trim().isEmpty()) {
+                                            if (isCommand(feedbackText)) {
+                                                sendMessage(String.valueOf(chatId), "Пожалуйста, отправьте текст как ваш отзыв.");
+                                            } else {
+                                                saveFeedback(chatId, feedbackText, updateNode.toString());
+                                            }
+                                        } else {
+                                            sendMessage(String.valueOf(chatId), "Текст отзыва не может быть пустым. Пожалуйста, напишите свой отзыв.");
+                                        }
+                                    } else {
+                                        sendMessage(String.valueOf(chatId), "Произошла ошибка. Вы не ожидаете отзыв. Пожалуйста, воспользуйтесь командой /write_feedback.");
+                                    }
+                                } else {
+                                    System.out.println("Chat ID not found or invalid");
+                                    sendMessage(String.valueOf(chatId), "Произошла ошибка при обработке вашей команды. Пожалуйста, попробуйте еще раз.");
+                                }
+                            } else {
+                                System.out.println("Chat node not found");
+                            }
+                        } else {
+                            System.out.println("Message node not found");
+                        }
+                    }
+                } else {
+                    System.out.println("Result node is not an array");
+                }
+            } else {
+                System.out.println("Result node not found");
+            }
+        } catch (IOException e) {
+            handleExecuteError(e);
+        }
+    }
+
+
+    private boolean isCommand(String text) {
+            return text.trim().startsWith("/") && !text.trim().startsWith("/write_feedback");
+        }
+    private void handleFeedbackCommand(@RequestBody String requestBody) {
+        logRequestBody(requestBody);
+
+
+        try {
+            JsonNode jsonNode = objectMapper.readTree(requestBody);
+
+            String chatIdString = String.valueOf(extractChatId(jsonNode));
+
+
+            if (!chatIdString.isEmpty()) {
+                long chatId = Long.parseLong(chatIdString);
+
+                if (jsonNode.has("message")) {
+                    JsonNode messageNode = jsonNode.get("message");
+
+                    if (messageNode.has("chat")) {
+                        JsonNode chatNode = messageNode.get("chat");
+                        List<Feedback> feedbackList = feedbackService.getFeedbackByChatId(chatId);
+
+                        if (!feedbackList.isEmpty()) {
+                            StringBuilder message = new StringBuilder("<b>Отзывы:</b>\n\n");
+                            for (Feedback feedback : feedbackList) {
+                                message.append("<strong>").append(feedback.getUsername()).append("</strong>: ")
+                                        .append(feedback.getMessage()).append("\n");
+                            }
+
+                            sendMessageWithHTML(String.valueOf(chatId), message.toString());
+                        } else {
+                            sendMessage(String.valueOf(chatId), "Пока нет отзывов.");
+                        }
+                    } else {
+                        System.out.println("Chat node not found in the request");
+                    }
+                } else {
+                    System.out.println("Message node not found in the request");
+                }
+            } else {
+                System.out.println("Chat ID not found or invalid");
+            }
+        } catch (IOException | NumberFormatException e) {
+            handleExecuteError(e);
+
+        }
+    }
+
+    private void saveFeedback(long chatId, String feedbackText, String requestBody) {
+        try {
+            String username = extractUsername(requestBody);
+            if (chatId != 0 && username != null && !username.isEmpty() && feedbackText != null) {
                 Feedback feedback = new Feedback();
                 feedback.setChatId(chatId);
                 feedback.setUsername(username);
-                feedback.setMessage(message);
+                feedback.setMessage(feedbackText);
 
                 feedbackService.saveFeedback(feedback);
 
                 System.out.println("Отзыв успешно сохранен: " + feedback);
 
-                // Проверяем, ожидает ли пользователь отзыв
-                if (awaitingFeedback.containsKey(chatId) && awaitingFeedback.get(chatId)) {
-                    // Отправляем сообщение об успешном сохранении отзыва
-                    sendMessage(String.valueOf(chatId), "Отзыв успешно сохранен: " + message);
-                    // Сбрасываем состояние ожидания для данного пользователя
-                    awaitingFeedback.put(chatId, false);
-                }
+                awaitingFeedback.put(chatId, false);
+                sendMessageWithHTML(String.valueOf(chatId), "Спасибо за ваш отзыв!");
             } else {
                 System.out.println("Некорректные данные для сохранения отзыва");
+                sendMessageWithHTML(String.valueOf(chatId), "Произошла ошибка при сохранении отзыва. Пожалуйста, попробуйте еще раз.");
             }
         } catch (Exception e) {
             e.printStackTrace();
             System.out.println("Произошла ошибка при сохранении отзыва");
+            sendMessageWithHTML(String.valueOf(chatId), "Произошла ошибка при сохранении отзыва. Пожалуйста, попробуйте еще раз.");
         }
     }
 
-    private long extractChatId(String requestBody) {
-        try {
-            JsonNode jsonNode = objectMapper.readTree(requestBody);
-            System.out.println("JsonNode: " + jsonNode);
+        private long extractChatId(String requestBody) {
+            try {
+                JsonNode jsonNode = objectMapper.readTree(requestBody);
+                JsonNode messageNode = jsonNode.get("message");
 
-            JsonNode messageNode = jsonNode.get("message");
-            System.out.println("MessageNode: " + messageNode);
-
-            if (messageNode != null) {
-                JsonNode chatNode = messageNode.get("chat");
-
-                if (chatNode != null && chatNode.has("id") && chatNode.get("id").isNumber()) {
-                    return chatNode.get("id").asLong();
+                if (messageNode != null) {
+                    JsonNode chatNode = messageNode.get("chat");
+                    if (chatNode != null) {
+                        long chatId = extractChatIdFromNode(chatNode);
+                        if (chatId != 0) {
+                            return chatId;
+                        }
+                    } else {
+                        System.out.println("Chat node not found in the request");
+                    }
+                } else {
+                    System.out.println("Message node not found in the request");
                 }
+
+                JsonNode chatIdNode = jsonNode.path("chat_id");
+                if (!chatIdNode.isMissingNode()) {
+                    return chatIdNode.asLong();
+                }
+
+                MultiValueMap<String, String> params = UriComponentsBuilder.fromUriString(requestBody).build().getQueryParams();
+                if (params.containsKey("chat_id")) {
+                    return Long.parseLong(params.getFirst("chat_id"));
+                }
+
+                return extractChatIdFromNode(jsonNode);
+            } catch (IOException | NullPointerException e) {
+                e.printStackTrace();
             }
-        } catch (IOException | NullPointerException e) {
-            e.printStackTrace();
+
+            return 0;
+        }
+    private long extractChatId(JsonNode jsonNode) {
+        JsonNode messageNode = jsonNode.get("message");
+
+        if (messageNode != null) {
+            JsonNode chatNode = messageNode.get("chat");
+            if (chatNode != null) {
+                return extractChatIdFromNode(chatNode);
+            } else {
+                System.out.println("Chat node not found in the request");
+            }
+        } else {
+            System.out.println("Message node not found in the request");
         }
 
         return 0;
     }
 
-    private String extractUsername(String requestBody) {
-        try {
-            JsonNode jsonNode = objectMapper.readTree(requestBody);
-            JsonNode messageNode = jsonNode.get("message");
+        private long extractChatIdFromNode(JsonNode node) {
+            if (node != null && node.has("id") && node.get("id").isNumber()) {
+                long chatId = node.get("id").asLong();
+                System.out.println("Chat ID found: " + chatId);
+                return chatId;
+            } else {
+                System.out.println("Chat ID not found or invalid");
+                return 0;
+            }
+        }
 
-            if (messageNode != null) {
-                JsonNode fromNode = messageNode.get("from");
+        private String extractFeedbackText(JsonNode jsonNode) {
+            JsonNode messageNode = jsonNode.path("message");
+            if (!messageNode.isMissingNode()) {
+                JsonNode textNode = messageNode.path("text");
+                return textNode.asText();
+            }
+            return "";
+        }
 
-                if (fromNode != null && fromNode.has("username")) {
-                    return fromNode.get("username").asText();
+
+        private String extractUsername(String requestBody) {
+            try {
+                JsonNode jsonNode = objectMapper.readTree(requestBody);
+                JsonNode messageNode = jsonNode.get("message");
+
+                if (messageNode != null) {
+                    JsonNode fromNode = messageNode.get("from");
+
+                    if (fromNode != null && fromNode.has("username")) {
+                        return fromNode.get("username").asText();
+                    }
                 }
+            } catch (IOException | NullPointerException e) {
+                e.printStackTrace();
             }
-        } catch (IOException | NullPointerException e) {
-            e.printStackTrace();
+
+            return "";
         }
 
-        return "";
-    }
+        private String extractMessage(String requestBody) {
+            try {
+                JsonNode jsonNode = objectMapper.readTree(requestBody);
+                JsonNode messageNode = jsonNode.get("message");
 
-    private String extractMessage(String requestBody) {
-        try {
-            JsonNode jsonNode = objectMapper.readTree(requestBody);
-            JsonNode messageNode = jsonNode.get("message");
-
-            if (messageNode != null && messageNode.has("text")) {
-                return messageNode.get("text").asText();
+                if (messageNode != null && messageNode.has("text")) {
+                    return messageNode.get("text").asText();
+                }
+            } catch (IOException | NullPointerException e) {
+                e.printStackTrace();
             }
-        } catch (IOException | NullPointerException e) {
-            e.printStackTrace();
+
+            return "";
         }
 
-        return "";
-    }
-
-    private void handleExecuteError(IOException e) {
+        private void handleExecuteError(IOException e) {
+            e.printStackTrace();
+        }
+    private void handleExecuteError(Exception e) {
         e.printStackTrace();
     }
+
 
 }
 

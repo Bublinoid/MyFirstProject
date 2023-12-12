@@ -19,6 +19,7 @@ public class FeedbackService {
         if (isValidFeedback(feedback)) {
             feedbackRepository.save(feedback);
         } else {
+            throw new IllegalArgumentException("Invalid feedback");
 
         }
     }
