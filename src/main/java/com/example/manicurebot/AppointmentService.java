@@ -15,11 +15,14 @@ import java.util.List;
 public class AppointmentService {
 
     private final AppointmentRepository appointmentRepository;
+    private final UserStatusService userStatusService;
 
 
     @Autowired
-    public AppointmentService(AppointmentRepository appointmentRepository) {
+    public AppointmentService(AppointmentRepository appointmentRepository, UserStatusService userStatusService) {
         this.appointmentRepository = appointmentRepository;
+        this.userStatusService = userStatusService;
+
     }
 
     public List<String> getAvailableTimes(LocalDate selectedDate) {
@@ -52,6 +55,7 @@ public class AppointmentService {
             currentDate = currentDate.plusDays(1);
         }
 
+        System.out.println("Available dates: " + availableDates);
         return availableDates;
     }
 
