@@ -22,10 +22,12 @@ import org.telegram.telegrambots.meta.api.objects.User;
 
 import java.io.*;
 import java.net.HttpURLConnection;
+import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.*;
 
@@ -40,6 +42,7 @@ public class MyTelegramBotApi {
     private GoogleCloudStorageUploader storageUploader;
 
     private final FeedbackService feedbackService;
+    private AppointmentRepository appointmentRepository;
 
     private Set<Long> processedUpdates = new HashSet<>();
 
@@ -194,13 +197,7 @@ public class MyTelegramBotApi {
                                     sendMessage(String.valueOf(chatId), "Спасибо, что хотите оставить отзыв! Пожалуйста, напишите свой отзыв:");
                                 } else if (text.startsWith("/make_an_appointment")) {
                                     System.out.println("Received /make_an_appointment command");
-                                    String[] commandParts = text.split(" ");
-                                    if (commandParts.length == 2) {
-                                        String selectedDate = commandParts[1];
-                                        handleSelectedDate(chatId, selectedDate);
-                                    } else {
-                                        sendMessage(String.valueOf(chatId), "Неправильный формат команды. Используйте /make_an_appointment <дата>");
-                                    }
+                                    handleMakeAppointmentCommand(chatId);
                                 } else if (awaitingFeedback.containsKey(chatId) && awaitingFeedback.get(chatId)) {
                                     handleWriteFeedbackCommand(response.toString());
                                     awaitingFeedback.put(chatId, false);
@@ -214,10 +211,13 @@ public class MyTelegramBotApi {
                     System.out.println("Failed to retrieve updates. Response Code: " + connection.getResponseCode());
                 }
             }
+        } catch (MalformedURLException e) {
+            e.printStackTrace();
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
+
 
 
     private void sendPhoto(String chatId, String photoUrl) {
@@ -370,7 +370,7 @@ public class MyTelegramBotApi {
     }
 
     public void handleMakeAppointmentCommand(long chatId) {
-        sendMessage(String.valueOf(chatId), "Выберите дату для записи на маникюр:");
+        sendMessage(String.valueOf(chatId), "Вам предоставлены свободные даты, выберете подходящую именно Вам!");
 
         List<LocalDate> availableDates = appointmentService.getAvailableDates();
 
@@ -392,40 +392,72 @@ public class MyTelegramBotApi {
         sendReplyKeyboard(chatId, "Выберите дату:", keyboardMarkup);
     }
 
-    public void handleSelectedDate(long chatId, String selectedDate) {
 
+    public void handleSelectedDate(long chatId, String selectedDate) {
         LocalDate date = LocalDate.parse(selectedDate);
         List<String> availableTimes = appointmentService.getAvailableTimes(date);
 
-        ReplyKeyboardMarkup keyboardMarkup = new ReplyKeyboardMarkup();
-        keyboardMarkup.setSelective(true);
-        keyboardMarkup.setResizeKeyboard(true);
-        keyboardMarkup.setOneTimeKeyboard(false);
+        if (!availableTimes.isEmpty()) {
+            ReplyKeyboardMarkup keyboardMarkup = new ReplyKeyboardMarkup();
+            keyboardMarkup.setSelective(true);
+            keyboardMarkup.setResizeKeyboard(true);
+            keyboardMarkup.setOneTimeKeyboard(false);
 
-        List<KeyboardRow> keyboard = new ArrayList<>();
+            List<KeyboardRow> keyboard = new ArrayList<>();
 
-        for (String time : availableTimes) {
-            KeyboardRow row = new KeyboardRow();
-            row.add(new KeyboardButton(time));
-            keyboard.add(row);
-        }
-
-        keyboardMarkup.setKeyboard(keyboard);
-
-        sendReplyKeyboard(chatId, "Выберите время:", keyboardMarkup);
-    }
-        public void handleSelectedTime(long chatId, String selectedTime, User user) {
-
-            LocalTime time = LocalTime.parse(selectedTime);
-            boolean success = appointmentService.makeAppointment(user, LocalDate.now(), time);
-
-            if (success) {
-                sendMessage(String.valueOf(chatId), "Вы успешно записаны на маникюр!");
-            } else {
-                sendMessage(String.valueOf(chatId), "Извините, выбранное время уже занято. Пожалуйста, выберите другое время.");
+            for (String time : availableTimes) {
+                KeyboardRow row = new KeyboardRow();
+                row.add(new KeyboardButton(time));
+                keyboard.add(row);
             }
+
+            keyboardMarkup.setKeyboard(keyboard);
+            sendReplyKeyboard(chatId, "Выберите время:", keyboardMarkup);
+        } else {
+            sendMessage(String.valueOf(chatId), "На выбранную дату нет доступного времени. Выберите другую дату.");
         }
-        private void sendReplyKeyboard(long chatId, String text, ReplyKeyboardMarkup keyboardMarkup) {
+    }
+
+    public void handleSelectedTime(long chatId, String selectedTime, com.example.manicurebot.User user) {
+        LocalDate currentDate = LocalDate.now();
+        LocalTime time = LocalTime.parse(selectedTime);
+        LocalDateTime selectedDateTime = LocalDateTime.of(currentDate, time);
+
+        boolean success = appointmentService.makeAppointment(user, selectedDateTime);
+
+        if (success) {
+            sendMessage(String.valueOf(chatId), "Вы успешно записаны на маникюр!");
+        } else {
+            sendMessage(String.valueOf(chatId), "Извините, выбранное время уже занято. Пожалуйста, выберите другое время.");
+        }
+    }
+
+    public boolean makeAppointment(com.example.manicurebot.User user, LocalDateTime selectedDateTime) {
+        String selectedDateString = selectedDateTime.toLocalDate().toString();
+        String selectedTimeString = selectedDateTime.toLocalTime().toString();
+
+        if (isTimeSlotAvailable(selectedDateString, selectedTimeString)) {
+            appointmentRepository.reserveTimeSlot(selectedDateString, String.valueOf(user.getId()), selectedTimeString);
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    private boolean isTimeSlotAvailable(String selectedDateString, String selectedTimeString) {
+        LocalTime selectedTime = LocalTime.parse(selectedTimeString);
+
+        if (selectedTime.isBefore(LocalTime.of(10, 0)) || selectedTime.isAfter(LocalTime.of(17, 0))) {
+            return false;
+        }
+
+        Appointment existingAppointment = appointmentRepository.findAvailableAppointment(selectedDateString, selectedTimeString);
+        return existingAppointment == null;
+    }
+
+
+
+    private void sendReplyKeyboard(long chatId, String text, ReplyKeyboardMarkup keyboardMarkup) {
             SendMessage message = new SendMessage();
             message.setChatId(String.valueOf(chatId));
             message.setText(text);
@@ -602,7 +634,7 @@ public class MyTelegramBotApi {
 
                     if (messageNode.has("chat")) {
                         JsonNode chatNode = messageNode.get("chat");
-                        List<Feedback> feedbackList = feedbackService.getFeedbackByChatId(chatId);
+                        List<Feedback> feedbackList = feedbackService.getAllFeedback();
 
                         if (!feedbackList.isEmpty()) {
                             StringBuilder message = new StringBuilder("<b>Отзывы:</b>\n\n");

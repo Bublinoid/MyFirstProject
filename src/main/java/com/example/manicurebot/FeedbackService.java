@@ -33,5 +33,10 @@ public class FeedbackService {
     public List<Feedback> getFeedbackByChatId(Long chatId) {
         return feedbackRepository.findByChatId(chatId);
     }
+
+    public List<Feedback> getAllFeedback() {
+        return feedbackRepository.findAll();
+    }
+
 }
 
