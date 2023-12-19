@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 public class AppointmentService {
@@ -72,18 +73,33 @@ public class AppointmentService {
     public List<LocalTime> getAvailableTimesForDate(LocalDate selectedDate) {
         // Логика для получения доступных времен для конкретной даты
         // Зависит от ваших требований
-        // Пример: возвращаем список времен с 10:00 до 17:00 с шагом 2 часа 30 минут
+        // Пример: возвращаем список времен с 10:00 до 17:00 с интервалом в 1 час
+
         List<LocalTime> availableTimes = new ArrayList<>();
         LocalTime startTime = LocalTime.of(10, 0);
-        LocalTime endTime = LocalTime.of(17, 0);
+        LocalTime endTime = LocalTime.of(18, 0);
 
-        while (startTime.plusHours(2).plusMinutes(30).isBefore(endTime)) {
+        while (startTime.isBefore(endTime)) {
             availableTimes.add(startTime);
-            startTime = startTime.plusHours(2).plusMinutes(30);
+            startTime = startTime.plusHours(1);
         }
 
         return availableTimes;
     }
+
+    public List<LocalTime> getOccupiedTimesForDate(LocalDate selectedDate) {
+        // Получите из репозитория список записей на приемы на выбранную дату
+        List<Appointment> appointments = appointmentRepository.getAppointmentsByDate(selectedDate.toString());
+
+        List<LocalTime> occupiedTimes = appointments.stream()
+                .map(appointment -> LocalTime.parse(appointment.getTime()))
+                .collect(Collectors.toList());
+
+        return occupiedTimes;
+    }
+
+
+
 
     private boolean isTimeSlotAvailable(String selectedDateString, String selectedTimeString) {
         List<String> availableTimes = getAvailableTimes(LocalDate.parse(selectedDateString));
@@ -91,8 +107,17 @@ public class AppointmentService {
     }
 
     public boolean makeAppointment(User user, LocalDateTime selectedDateTime) {
-        return false;
+        String selectedDateString = selectedDateTime.toLocalDate().toString();
+        String selectedTimeString = selectedDateTime.toLocalTime().toString();
+
+        if (isTimeSlotAvailable(selectedDateString, selectedTimeString)) {
+            appointmentRepository.reserveTimeSlot(selectedDateString, selectedTimeString, String.valueOf(user.getId()));
+            return true;
+        } else {
+            return false;
+        }
     }
+
 
 //    public List<LocalDate> getAvailableDates() {
 //        List<LocalDate> availableDates = appointmentRepository.getAvailableDates();

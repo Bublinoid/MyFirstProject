@@ -18,6 +18,8 @@ import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.CallbackQuery;
+import org.telegram.telegrambots.meta.api.objects.Chat;
+import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardMarkup;
@@ -44,19 +46,22 @@ public class MyTelegramBotApi {
     private final String botToken;
     private final String baseUrl;
     private long offset;
-    private GoogleCloudStorageUploader storageUploader;
+
     private final FeedbackService feedbackService;
     private final UserStatusService userStatusService;
     @Autowired
+    private AppointmentService appointmentService;
+    @Autowired
     private AppointmentRepository appointmentRepository;
+
     private Set<Long> processedUpdates = new HashSet<>();
     private final RestTemplate restTemplate = new RestTemplate();
     private Map<Long, Boolean> awaitingFeedback = new HashMap<>();
     private Map<Long, String> feedbackTextMap = new HashMap<>();
     private Map<Long, String> feedbackChatMap = new HashMap<>();
     private final ObjectMapper objectMapper = new ObjectMapper();
-
     private static final Logger logger = LoggerFactory.getLogger(MyTelegramBotApi.class);
+    private GoogleCloudStorageUploader storageUploader;
     private Storage storage;
     private final String bucketName = "telegram_manicure_bot";
     private final String photoUrl1 = "https://storage.googleapis.com/telegram_manicure_bot/photo_2023-11-21_19-58-02.jpg";
@@ -64,17 +69,17 @@ public class MyTelegramBotApi {
     private final String photoUrl3 = "https://storage.googleapis.com/telegram_manicure_bot/photo_2023-11-21_19-58-07.jpg";
     private final String photoUrl4 = "https://storage.googleapis.com/telegram_manicure_bot/photo_2023-11-21_19-58-06.jpg";
 
-    @Autowired
-    private AppointmentService appointmentService;
+
 
 
     @Autowired
     public MyTelegramBotApi(@Value("${telegram.bot.token}") String botToken,
-                            GoogleCloudStorageUploader storageUploader, FeedbackService feedbackService, UserStatusService userStatusService) {
+                            GoogleCloudStorageUploader storageUploader, FeedbackService feedbackService, UserStatusService userStatusService, AppointmentService appointmentService) {
         this.botToken = botToken;
         this.baseUrl = "https://api.telegram.org/bot" + botToken;
         this.feedbackService = feedbackService;
         this.userStatusService = userStatusService;
+        this.appointmentService = appointmentService;
         this.offset = 0;
 
         this.storageUploader = storageUploader;
@@ -207,6 +212,12 @@ public class MyTelegramBotApi {
                                     System.out.println("Message node is null");
                                 }
                             }
+                            JsonNode callbackQueryNode = updateNode.get("callback_query");
+                            if (callbackQueryNode != null) {
+                                CallbackQuery callbackQuery = objectMapper.treeToValue(callbackQueryNode, CallbackQuery.class);
+                                handleCallbackQuery(callbackQuery);
+                            }
+
                         }
                     }
                 } else {
@@ -221,6 +232,8 @@ public class MyTelegramBotApi {
             e.printStackTrace();
         }
     }
+
+
 
 
     private void sendPhoto(String chatId, String photoUrl) {
@@ -369,16 +382,40 @@ public class MyTelegramBotApi {
             e.printStackTrace();
         }
     }
-        public void handleInlineCallbackQuery(Update update) throws TelegramApiException {
-            CallbackQuery callbackQuery = update.getCallbackQuery();
+    public void handleInlineCallbackQuery(Update update) throws TelegramApiException {
+        CallbackQuery callbackQuery = update.getCallbackQuery();
+
+        if (callbackQuery != null) {
             String data = callbackQuery.getData();
 
-            if (data.startsWith("selectedDate:")) {
-                String selectedDatePair = data.replace("selectedDate:", "");
+            if (data != null && data.startsWith("selectDate:")) {
+                String selectedDateString = data.replace("selectDate:", "");
                 long chatId = callbackQuery.getMessage().getChatId();
-                handleSelectedDatePair(chatId, selectedDatePair);
+
+                handleSelectedDate(chatId, selectedDateString, callbackQuery);
             }
+        } else {
+            System.out.println("CallbackQuery is null");
         }
+    }
+
+
+    public void handleCallbackQuery(CallbackQuery callbackQuery) {
+        long chatId = callbackQuery.getMessage().getChatId();
+        String data = callbackQuery.getData();
+
+        if (data.startsWith("selectDate:")) {
+            String selectedDate = data.replace("selectDate:", "");
+            handleSelectedDate(chatId, selectedDate, callbackQuery);
+        } else if (data.startsWith("selectedTime:")) {
+            String selectedTime = data.replace("selectedTime:", "");
+            String username = callbackQuery.getMessage().getChat().getUserName();
+            handleSelectedTime(chatId, selectedTime, null);
+        }
+    }
+
+
+
     public void handleSelectedDatePair(long chatId, String selectedDatePair) throws TelegramApiException {
         logger.debug("Selected date pair: {}", selectedDatePair);
 
@@ -447,37 +484,56 @@ public class MyTelegramBotApi {
         System.out.println("Message with inline date keyboard executed");
     }
 
+    public void handleSelectedDate(long chatId, String selectedDate, CallbackQuery callbackQuery) {
+        System.out.println("Selected date: " + selectedDate);
 
+        if (callbackQuery != null) {
+            Message message = callbackQuery.getMessage();
+            if (message != null) {
+                System.out.println("Message ID: " + message.getMessageId());
 
+                // Преобразуйте строку selectedDate в объект LocalDate
+                LocalDate localDate = LocalDate.parse(selectedDate);
 
+                // Отправка списка доступного времени с использованием inline-клавиатуры
+                List<List<InlineKeyboardButton>> keyboardButtons = new ArrayList<>();
+                List<LocalTime> availableTimes = appointmentService.getAvailableTimesForDate(localDate);
 
-    public void handleSelectedDate(long chatId, String selectedDate, List<LocalDate> availableDates) {
-            System.out.println("Selected date: " + selectedDate);
-            LocalDate date = LocalDate.parse(selectedDate);
-            List<String> availableTimes = appointmentService.getAvailableTimes(date);
-
-            if (!availableTimes.isEmpty()) {
-                ReplyKeyboardMarkup keyboardMarkup = new ReplyKeyboardMarkup();
-                keyboardMarkup.setSelective(true);
-                keyboardMarkup.setResizeKeyboard(true);
-                keyboardMarkup.setOneTimeKeyboard(false);
-
-                List<KeyboardRow> keyboard = new ArrayList<>();
-
-                for (String time : availableTimes) {
-                    KeyboardRow row = new KeyboardRow();
-                    row.add(new KeyboardButton(time));
-                    keyboard.add(row);
+                for (LocalTime time : availableTimes) {
+                    InlineKeyboardButton button = new InlineKeyboardButton();
+                    button.setText(time.toString());
+                    button.setCallbackData("selectedTime:" + time);
+                    List<InlineKeyboardButton> row = new ArrayList<>();
+                    row.add(button);
+                    keyboardButtons.add(row);
                 }
 
-                keyboardMarkup.setKeyboard(keyboard);
-                sendInlineDateKeyboard(chatId, "Выберите время:", availableDates);
-            } else {
-                sendMessage(String.valueOf(chatId), "На выбранную дату нет доступного времени. Выберите другую дату.");
-            }
-        }
+                InlineKeyboardMarkup inlineKeyboardMarkup = new InlineKeyboardMarkup();
+                inlineKeyboardMarkup.setKeyboard(keyboardButtons);
 
-        public void handleSelectedTime(long chatId, String selectedTime, com.example.manicurebot.User user) {
+                SendMessage responseMessage = new SendMessage();
+                responseMessage.setChatId(String.valueOf(chatId));
+                responseMessage.setText("Выберите время:");
+                responseMessage.setReplyMarkup(inlineKeyboardMarkup);
+
+                try {
+                    execute(responseMessage);
+                    System.out.println("Message with inline time keyboard executed");
+                } catch (TelegramApiException e) {
+                    e.printStackTrace();
+                    System.out.println("Error executing message with inline time keyboard");
+                }
+            } else {
+                System.out.println("Message is null");
+            }
+        } else {
+            System.out.println("CallbackQuery is null");
+        }
+    }
+
+
+
+    public void handleSelectedTime(long chatId, String selectedTime, com.example.manicurebot.User user) {
             LocalDate currentDate = LocalDate.now();
             LocalTime time = LocalTime.parse(selectedTime);
             LocalDateTime selectedDateTime = LocalDateTime.of(currentDate, time);
@@ -489,6 +545,16 @@ public class MyTelegramBotApi {
                 sendMessage(String.valueOf(chatId), "Извините, выбранное время уже занято. Пожалуйста, выберите другое время.");
             }
         }
+
+    private boolean isTimeSlotAvailable(String selectedDateString, String selectedTimeString) {
+        LocalTime selectedTime = LocalTime.parse(selectedTimeString);
+
+        if (selectedTime.isBefore(LocalTime.of(10, 0)) || selectedTime.isAfter(LocalTime.of(17, 0))) {
+            return false;
+        }
+        Appointment existingAppointment = appointmentRepository.findAvailableAppointment(selectedDateString, selectedTimeString);
+        return existingAppointment == null;
+    }
 
         public boolean makeAppointment(com.example.manicurebot.User user, LocalDateTime selectedDateTime) {
             String selectedDateString = selectedDateTime.toLocalDate().toString();
@@ -502,15 +568,12 @@ public class MyTelegramBotApi {
             }
         }
 
-        private boolean isTimeSlotAvailable(String selectedDateString, String selectedTimeString) {
-            LocalTime selectedTime = LocalTime.parse(selectedTimeString);
+    public List<String> getOccupiedTimesForDate(LocalDate selectedDate) {
+        String selectedDateString = selectedDate.toString();
+        return appointmentRepository.getOccupiedTimesForDate(selectedDateString);
+    }
 
-            if (selectedTime.isBefore(LocalTime.of(10, 0)) || selectedTime.isAfter(LocalTime.of(17, 0))) {
-                return false;
-            }
-            Appointment existingAppointment = appointmentRepository.findAvailableAppointment(selectedDateString, selectedTimeString);
-            return existingAppointment == null;
-        }
+
 
     public void sendInlineDateKeyboard(long chatId, String text, List<LocalDate> dates) {
         SendMessage message = new SendMessage();

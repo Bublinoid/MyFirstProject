@@ -4,6 +4,7 @@ import com.example.manicurebot.Appointment;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
@@ -28,4 +29,9 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
     void reserveTimeSlotByDateTimeAndId(String selectedDateString, String selectedTimeString, Long id);
     @Query("SELECT DISTINCT a.date FROM Appointment a WHERE a.userId IS NULL")
     List<LocalDate> getAvailableDates();
+    @Query("SELECT a.time FROM Appointment a WHERE a.date = ?1 AND a.userId IS NOT NULL")
+    List<String> getOccupiedTimesForDate(String selectedDate);
+    @Query("SELECT a FROM Appointment a WHERE a.date = ?1")
+    List<Appointment> getAppointmentsByDate(String selectedDate);
+
 }
