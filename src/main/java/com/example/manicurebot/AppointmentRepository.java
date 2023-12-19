@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.util.List;
 
 public interface AppointmentRepository extends JpaRepository<Appointment, Long> {
@@ -25,4 +26,6 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
     @Transactional
     @Query("UPDATE Appointment a SET a.userId = ?3 WHERE a.date = ?1 AND a.time = ?2 AND a.userId IS NULL")
     void reserveTimeSlotByDateTimeAndId(String selectedDateString, String selectedTimeString, Long id);
+    @Query("SELECT DISTINCT a.date FROM Appointment a WHERE a.userId IS NULL")
+    List<LocalDate> getAvailableDates();
 }

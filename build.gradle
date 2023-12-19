@@ -8,13 +8,13 @@ group = 'com.example'
 version = '0.0.1-SNAPSHOT'
 
 java {
-    sourceCompatibility = '1.8'
+    toolchain {
+        languageVersion.set(JavaLanguageVersion.of(17))
+    }
 }
 
 tasks.withType(JavaCompile) {
-    configure {
-        options.encoding = 'UTF-8'
-    }
+    options.encoding = 'UTF-8'
 }
 
 repositories {

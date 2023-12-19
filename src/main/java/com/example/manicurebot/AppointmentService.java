@@ -1,5 +1,7 @@
 package com.example.manicurebot;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -9,6 +11,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 @Service
@@ -16,6 +19,7 @@ public class AppointmentService {
 
     private final AppointmentRepository appointmentRepository;
     private final UserStatusService userStatusService;
+    private final Logger logger = LoggerFactory.getLogger(AppointmentService.class);
 
 
     @Autowired
@@ -43,8 +47,10 @@ public class AppointmentService {
     }
 
     public List<LocalDate> getAvailableDates() {
+        logger.info("Вызван метод getAvailableDates()");
+
         LocalDate currentDate = LocalDate.now();
-        LocalDate endDate = currentDate.plusMonths(2);
+        LocalDate endDate = currentDate.plusMonths(1);
 
         List<LocalDate> availableDates = new ArrayList<>();
 
@@ -55,9 +61,13 @@ public class AppointmentService {
             currentDate = currentDate.plusDays(1);
         }
 
-        System.out.println("Available dates: " + availableDates);
+        logger.info("Доступные даты: {}", availableDates);
         return availableDates;
     }
+
+
+
+
 
     public List<LocalTime> getAvailableTimesForDate(LocalDate selectedDate) {
         // Логика для получения доступных времен для конкретной даты
@@ -83,4 +93,11 @@ public class AppointmentService {
     public boolean makeAppointment(User user, LocalDateTime selectedDateTime) {
         return false;
     }
+
+//    public List<LocalDate> getAvailableDates() {
+//        List<LocalDate> availableDates = appointmentRepository.getAvailableDates();
+//        logger.info("Available dates from repository: {}", availableDates);
+//        return availableDates != null ? availableDates : Collections.emptyList();
+//    }
+
 }
