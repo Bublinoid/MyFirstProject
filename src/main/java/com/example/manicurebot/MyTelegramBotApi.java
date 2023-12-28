@@ -48,11 +48,13 @@ public class MyTelegramBotApi {
     private long offset;
 
     private final FeedbackService feedbackService;
+    private final UserService userService;
     private final UserStatusService userStatusService;
     @Autowired
     private AppointmentService appointmentService;
     @Autowired
     private AppointmentRepository appointmentRepository;
+    private LocalDate selectedDate;
 
     private Set<Long> processedUpdates = new HashSet<>();
     private final RestTemplate restTemplate = new RestTemplate();
@@ -74,12 +76,13 @@ public class MyTelegramBotApi {
 
     @Autowired
     public MyTelegramBotApi(@Value("${telegram.bot.token}") String botToken,
-                            GoogleCloudStorageUploader storageUploader, FeedbackService feedbackService, UserStatusService userStatusService, AppointmentService appointmentService) {
+                            GoogleCloudStorageUploader storageUploader, FeedbackService feedbackService, UserStatusService userStatusService, AppointmentService appointmentService, UserService userService) {
         this.botToken = botToken;
         this.baseUrl = "https://api.telegram.org/bot" + botToken;
         this.feedbackService = feedbackService;
         this.userStatusService = userStatusService;
         this.appointmentService = appointmentService;
+        this.userService = userService;
         this.offset = 0;
 
         this.storageUploader = storageUploader;
@@ -405,12 +408,13 @@ public class MyTelegramBotApi {
         String data = callbackQuery.getData();
 
         if (data.startsWith("selectDate:")) {
-            String selectedDate = data.replace("selectDate:", "");
-            handleSelectedDate(chatId, selectedDate, callbackQuery);
+            String selectedDateStr = data.replace("selectDate:", "");
+            selectedDate = LocalDate.parse(selectedDateStr);
+            handleSelectedDate(chatId, selectedDateStr, callbackQuery);
         } else if (data.startsWith("selectedTime:")) {
             String selectedTime = data.replace("selectedTime:", "");
             String username = callbackQuery.getMessage().getChat().getUserName();
-            handleSelectedTime(chatId, selectedTime, null);
+            handleSelectedTime(chatId, selectedTime, username, selectedDate); // Передайте username и selectedDate
         }
     }
 
@@ -493,35 +497,48 @@ public class MyTelegramBotApi {
                 System.out.println("Message ID: " + message.getMessageId());
 
                 // Преобразуйте строку selectedDate в объект LocalDate
-                LocalDate localDate = LocalDate.parse(selectedDate);
+                LocalDate selectedLocalDate = LocalDate.parse(selectedDate);
 
-                // Отправка списка доступного времени с использованием inline-клавиатуры
-                List<List<InlineKeyboardButton>> keyboardButtons = new ArrayList<>();
-                List<LocalTime> availableTimes = appointmentService.getAvailableTimesForDate(localDate);
+                // Получите имя пользователя из чата
+                String username = message.getChat().getUserName();
 
-                for (LocalTime time : availableTimes) {
-                    InlineKeyboardButton button = new InlineKeyboardButton();
-                    button.setText(time.toString());
-                    button.setCallbackData("selectedTime:" + time);
-                    List<InlineKeyboardButton> row = new ArrayList<>();
-                    row.add(button);
-                    keyboardButtons.add(row);
-                }
+                // Получите объект пользователя по имени пользователя из вашего сервиса пользователя
+                User user = userService.getUserByUsername(username);
 
-                InlineKeyboardMarkup inlineKeyboardMarkup = new InlineKeyboardMarkup();
-                inlineKeyboardMarkup.setKeyboard(keyboardButtons);
+                if (user != null) {
+                    // Отправка списка доступного времени с использованием inline-клавиатуры
+                    List<List<InlineKeyboardButton>> keyboardButtons = new ArrayList<>();
+                    List<LocalTime> availableTimes = appointmentService.getAvailableTimesForDate(selectedLocalDate);
 
-                SendMessage responseMessage = new SendMessage();
-                responseMessage.setChatId(String.valueOf(chatId));
-                responseMessage.setText("Выберите время:");
-                responseMessage.setReplyMarkup(inlineKeyboardMarkup);
+                    for (LocalTime time : availableTimes) {
+                        InlineKeyboardButton button = new InlineKeyboardButton();
+                        button.setText(time.toString());
+                        button.setCallbackData("selectedTime:" + time);
+                        List<InlineKeyboardButton> row = new ArrayList<>();
+                        row.add(button);
+                        keyboardButtons.add(row);
+                    }
 
-                try {
-                    execute(responseMessage);
-                    System.out.println("Message with inline time keyboard executed");
-                } catch (TelegramApiException e) {
-                    e.printStackTrace();
-                    System.out.println("Error executing message with inline time keyboard");
+                    InlineKeyboardMarkup inlineKeyboardMarkup = new InlineKeyboardMarkup();
+                    inlineKeyboardMarkup.setKeyboard(keyboardButtons);
+
+                    SendMessage responseMessage = new SendMessage();
+                    responseMessage.setChatId(String.valueOf(chatId));
+                    responseMessage.setText("Выберите время:");
+                    responseMessage.setReplyMarkup(inlineKeyboardMarkup);
+
+                    try {
+                        // Передайте объект пользователя и выбранную дату в метод handleSelectedTime
+                        handleSelectedTime(chatId, selectedDate, username, selectedLocalDate);
+
+                        execute(responseMessage);
+                        System.out.println("Message with inline time keyboard executed");
+                    } catch (TelegramApiException e) {
+                        e.printStackTrace();
+                        System.out.println("Error executing message with inline time keyboard");
+                    }
+                } else {
+                    System.out.println("User is null");
                 }
             } else {
                 System.out.println("Message is null");
@@ -532,22 +549,28 @@ public class MyTelegramBotApi {
     }
 
 
-
-    public void handleSelectedTime(long chatId, String selectedTime, com.example.manicurebot.User user) {
-            LocalDate currentDate = LocalDate.now();
-            LocalTime time = LocalTime.parse(selectedTime);
-            LocalDateTime selectedDateTime = LocalDateTime.of(currentDate, time);
-            boolean success = appointmentService.makeAppointment(user, selectedDateTime);
+    public void handleSelectedTime(long chatId, String selectedTime, String username, LocalDate selectedDate) {
+        if (username != null) {
+            LocalTime time = LocalTime.parse(selectedTime, DateTimeFormatter.ISO_LOCAL_TIME);
+            LocalDateTime selectedDateTime = LocalDateTime.of(selectedDate, time);
+            boolean success = appointmentService.makeAppointment(username, selectedDateTime);
 
             if (success) {
                 sendMessage(String.valueOf(chatId), "Вы успешно записаны на маникюр!");
             } else {
                 sendMessage(String.valueOf(chatId), "Извините, выбранное время уже занято. Пожалуйста, выберите другое время.");
             }
+        } else {
+            sendMessage(String.valueOf(chatId), "Извините, произошла ошибка. Пожалуйста, повторите попытку.");
         }
+    }
+
+
+
+
 
     private boolean isTimeSlotAvailable(String selectedDateString, String selectedTimeString) {
-        LocalTime selectedTime = LocalTime.parse(selectedTimeString);
+        LocalTime selectedTime = LocalTime.parse(selectedTimeString, DateTimeFormatter.ISO_LOCAL_TIME);
 
         if (selectedTime.isBefore(LocalTime.of(10, 0)) || selectedTime.isAfter(LocalTime.of(17, 0))) {
             return false;

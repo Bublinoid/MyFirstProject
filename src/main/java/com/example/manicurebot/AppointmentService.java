@@ -10,8 +10,6 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -83,7 +81,7 @@ public class AppointmentService {
             availableTimes.add(startTime);
             startTime = startTime.plusHours(1);
         }
-
+        logger.info("Доступные времена для даты {}: {}", selectedDate, availableTimes);
         return availableTimes;
     }
 
@@ -95,28 +93,56 @@ public class AppointmentService {
                 .map(appointment -> LocalTime.parse(appointment.getTime()))
                 .collect(Collectors.toList());
 
+        logger.info("Занятые времена для даты {}: {}", selectedDate, occupiedTimes);
         return occupiedTimes;
     }
 
-
-
-
     private boolean isTimeSlotAvailable(String selectedDateString, String selectedTimeString) {
-        List<String> availableTimes = getAvailableTimes(LocalDate.parse(selectedDateString));
-        return availableTimes.contains(selectedTimeString);
+        LocalDate selectedDate = LocalDate.parse(selectedDateString);
+        LocalTime selectedTime = LocalTime.parse(selectedTimeString);
+
+        // Проверяем, свободно ли выбранное время
+        List<String> availableTimes = getAvailableTimes(selectedDate);
+
+        // Получаем список занятых времен для выбранной даты
+        List<LocalTime> occupiedTimes = getOccupiedTimesForDate(selectedDate);
+
+        // Проверяем, что выбранное время входит в список доступных и не входит в список занятых
+        if (availableTimes.contains(selectedTime) && !occupiedTimes.contains(selectedTime)) {
+            return true;
+        } else {
+            // Выводим сообщение, если выбранное время занято
+            logger.info("Время {} на дату {} уже занято или недоступно.", selectedTimeString, selectedDateString);
+            return false;
+        }
     }
 
-    public boolean makeAppointment(User user, LocalDateTime selectedDateTime) {
+
+
+    public boolean makeAppointment(String user, LocalDateTime selectedDateTime) {
         String selectedDateString = selectedDateTime.toLocalDate().toString();
         String selectedTimeString = selectedDateTime.toLocalTime().toString();
 
+        // Проверяем, свободно ли выбранное время
         if (isTimeSlotAvailable(selectedDateString, selectedTimeString)) {
-            appointmentRepository.reserveTimeSlot(selectedDateString, selectedTimeString, String.valueOf(user.getId()));
-            return true;
+            // Получаем список занятых времен для выбранной даты
+            List<LocalTime> occupiedTimes = getOccupiedTimesForDate(selectedDateTime.toLocalDate());
+
+            // Проверяем, что выбранное время не входит в список занятых
+            if (!occupiedTimes.contains(selectedDateTime.toLocalTime())) {
+                // Если время свободно, резервируем его
+                appointmentRepository.reserveTimeSlot(selectedDateString, selectedTimeString, user);
+                return true;
+            } else {
+                // Выводим сообщение, если выбранное время занято
+                System.out.println("Извините, выбранное время уже занято. Пожалуйста, выберите другое время.");
+                return false;
+            }
         } else {
             return false;
         }
     }
+
 
 
 //    public List<LocalDate> getAvailableDates() {
