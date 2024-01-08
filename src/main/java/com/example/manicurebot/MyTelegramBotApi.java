@@ -206,6 +206,9 @@ public class MyTelegramBotApi {
                                         } else if (awaitingFeedback.containsKey(chatId) && awaitingFeedback.get(chatId)) {
                                             handleWriteFeedbackCommand(response.toString());
                                             awaitingFeedback.put(chatId, false);
+                                        } else if (text.startsWith("/discount")) {
+                                            System.out.println("Received /discount command");
+                                            sendDiscountMessage(chatId);
                                         } else {
                                             System.out.println("Unknown command: " + text);
                                         }
@@ -236,6 +239,124 @@ public class MyTelegramBotApi {
             e.printStackTrace();
         }
     }
+
+    private void sendDiscountMessage(Long chatId) {
+        sendMessage(String.valueOf(chatId), "Здравствуйте, у вас есть возможность выиграть скидку в размере 15%, если вы ответите правильно на 2 вопроса.");
+        sendFirstQuestion(chatId);
+    }
+
+    private void sendFirstQuestion(long chatId) {
+        String questionText = "Сколько будет 2+2*2?";
+
+        InlineKeyboardMarkup inlineKeyboardMarkup = new InlineKeyboardMarkup();
+        List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+
+        InlineKeyboardButton button8 = new InlineKeyboardButton();
+        button8.setText("8");
+        button8.setCallbackData("answer:8");
+
+        InlineKeyboardButton button6 = new InlineKeyboardButton();
+        button6.setText("6");
+        button6.setCallbackData("answer:6");
+
+        List<InlineKeyboardButton> row = new ArrayList<>();
+        row.add(button8);
+        row.add(button6);
+
+        rows.add(row);
+        inlineKeyboardMarkup.setKeyboard(rows);
+
+        sendMessageWithInlineKeyboard(chatId, questionText, inlineKeyboardMarkup);
+    }
+
+    private void sendSecondQuestion(long chatId) {
+        String questionText = "В каком году был изобретен вечный двигатель?";
+
+        InlineKeyboardMarkup inlineKeyboardMarkup = new InlineKeyboardMarkup();
+        List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+
+        InlineKeyboardButton button1912 = new InlineKeyboardButton();
+        button1912.setText("1912");
+        button1912.setCallbackData("answer:1912");
+
+        InlineKeyboardButton button1935 = new InlineKeyboardButton();
+        button1935.setText("1935");
+        button1935.setCallbackData("answer:1935");
+
+        InlineKeyboardButton buttonNotInvented = new InlineKeyboardButton();
+        buttonNotInvented.setText("Не был изобретен");
+        buttonNotInvented.setCallbackData("answer:notInvented");
+
+        InlineKeyboardButton button1987 = new InlineKeyboardButton();
+        button1987.setText("1987");
+        button1987.setCallbackData("answer:1987");
+
+        List<InlineKeyboardButton> row = new ArrayList<>();
+        row.add(button1912);
+        row.add(button1935);
+        row.add(buttonNotInvented);
+        row.add(button1987);
+
+        rows.add(row);
+        inlineKeyboardMarkup.setKeyboard(rows);
+
+        sendMessageWithInlineKeyboard(chatId, questionText, inlineKeyboardMarkup);
+    }
+
+    private void sendMessageWithInlineKeyboard(long chatId, String text, InlineKeyboardMarkup inlineKeyboardMarkup) {
+        SendMessage message = new SendMessage();
+        message.setChatId(String.valueOf(chatId));
+        message.setText(text);
+        message.setReplyMarkup(inlineKeyboardMarkup);
+
+        try {
+            execute(message);
+        } catch (TelegramApiException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public void handleAnswerCallbackQuery(CallbackQuery callbackQuery) {
+        long chatId = callbackQuery.getMessage().getChatId();
+        String data = callbackQuery.getData();
+
+        if (data.startsWith("answer:")) {
+            handleAnswer(String.valueOf(chatId), data.replace("answer:", ""));
+        }
+    }
+
+
+    private void handleAnswer(String chatId, String answer) {
+        switch (answer) {
+            case "8":
+                sendMessage(chatId, "Неправильно! Ничего страшного, есть еще один вопрос.");
+                sendSecondQuestion(Long.parseLong(chatId));
+                break;
+            case "6":
+                sendMessage(chatId, "Молодец! Еще один вопрос и скидка твоя!");
+                // Добавьте здесь код для продолжения опроса или предоставления скидки
+                break;
+            case "1912":
+            case "1935":
+                sendMessage(chatId, "Неправильно! Ничего страшного, есть еще один вопрос.");
+                sendSecondQuestion(Long.parseLong(chatId));
+                break;
+            case "notInvented":
+                sendMessage(chatId, "Молодец! Еще один вопрос и скидка твоя!");
+                // Добавьте здесь код для продолжения опроса или предоставления скидки
+                break;
+            case "1987":
+                sendMessage(chatId, "Неправильно! Ничего страшного, есть еще один вопрос.");
+                sendSecondQuestion(Long.parseLong(chatId));
+                break;
+            default:
+                // Обработка неизвестных вариантов ответов
+                break;
+        }
+    }
+
+
+
 
 
 
@@ -407,12 +528,17 @@ public class MyTelegramBotApi {
             // Обработка выбора количества ногтей
             String selectedNailCount = data.replace("selectNailCount:", "");
             handleSelectedNailCount(chatId, selectedNailCount);
-        } else if (data.startsWith("deleteAppointment: ")) {
+        } else if (data.startsWith("deleteAppointment:")) {
             String appointmentIdStr = data.replace("deleteAppointment:", "");
             Long appointmentId = Long.parseLong(appointmentIdStr);
             handleDeleteAppointment(chatId, appointmentId);
-
+        } else if (data.startsWith("viewAppointment:")) {
+            String appointmentIdStr = data.replace("viewAppointment:", "");
+            Long appointmentId = Long.parseLong(appointmentIdStr);
+            handleViewAppointment(chatId, appointmentId);
         }
+
+
     }
 
 
@@ -428,14 +554,22 @@ public class MyTelegramBotApi {
         myAppointmentsButton.setText("Мои записи");
         myAppointmentsButton.setCallbackData("procedure:my_appointments");
 
+        InlineKeyboardButton deleteAppointmentButton = new InlineKeyboardButton();
+        deleteAppointmentButton.setText("Удалить запись");
+        deleteAppointmentButton.setCallbackData("procedure:delete_appointment");
+
         List<InlineKeyboardButton> row1 = new ArrayList<>();
         row1.add(manicureButton);
 
         List<InlineKeyboardButton> row2 = new ArrayList<>();
         row2.add(myAppointmentsButton);
 
+        List<InlineKeyboardButton> row3 = new ArrayList<>();
+        row3.add(deleteAppointmentButton);
+
         rows.add(row1);
         rows.add(row2);
+        rows.add(row3);
 
         inlineKeyboardMarkup.setKeyboard(rows);
 
@@ -450,6 +584,7 @@ public class MyTelegramBotApi {
             e.printStackTrace();
         }
     }
+
     private void sendManicureProcedureMenu(long chatId) {
         InlineKeyboardMarkup inlineKeyboardMarkup = new InlineKeyboardMarkup();
         List<List<InlineKeyboardButton>> rows = new ArrayList<>();
@@ -500,7 +635,7 @@ public class MyTelegramBotApi {
 
         SendMessage message = new SendMessage();
         message.setChatId(String.valueOf(chatId));
-        message.setText("Выберите вид маникюра:");
+        message.setText("Выберите вид процедуры:");
         message.setReplyMarkup(inlineKeyboardMarkup);
 
         try {
@@ -517,11 +652,12 @@ public class MyTelegramBotApi {
             List<Appointment> userAppointments = appointmentService.getAppointmentsByUserId(userId);
             sendMyAppointmentsMenu(userId, userAppointments);
             logger.info("User Appointments for userId {}: {}", userId, userAppointments);
-
-
-            // Здесь добавьте логику для вывода списка записей пользователя
+        } else if (procedure.equals("delete_appointment")) {
+            List<Appointment> userAppointments = appointmentService.getAppointmentsByUserId(userId);
+            sendDeleteAppointmentMenu(userId, userAppointments);
         }
     }
+
 
     private void handleManicureProcedureSelection(long chatId, String manicureType) throws TelegramApiException {
 
@@ -579,16 +715,89 @@ public class MyTelegramBotApi {
         handleMakeAppointmentCommand(chatId);
     }
 
+    private void sendDeleteAppointmentMenu(long chatId, List<Appointment> appointments) {
+        InlineKeyboardMarkup inlineKeyboardMarkup = new InlineKeyboardMarkup();
+        List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+
+        if (appointments.isEmpty()) {
+            sendMessage(String.valueOf(chatId), "У вас нет записей для удаления.");
+            sendProcedureMenu(chatId);
+            return;
+        }
+
+        // Создаем список строк для информации о записях
+        List<String> appointmentInfoList = new ArrayList<>();
+
+        for (Appointment appointment : appointments) {
+            // Создаем строку для вывода информации о записи
+            String appointmentInfo = String.format("%s %s",
+                    appointment.getDate() != null ? appointment.getDate() : "",
+                    appointment.getTime() != null ? appointment.getTime() : "");
+
+            appointmentInfoList.add(appointmentInfo);
+
+            // Убедитесь, что appointment.getId() не равен null перед созданием callback'а
+            if (appointment.getId() != null) {
+                List<InlineKeyboardButton> row = new ArrayList<>();
+                InlineKeyboardButton infoButton = new InlineKeyboardButton();
+                infoButton.setText(appointmentInfo);
+                infoButton.setCallbackData("deleteAppointment:" + appointment.getId());
+                row.add(infoButton);
+                rows.add(row);
+            }
+        }
+
+        // Проверяем, что у нас есть записи для вывода клавиатуры
+        if (!rows.isEmpty()) {
+            inlineKeyboardMarkup.setKeyboard(rows);
+
+            // Добавляем текст и клавиатуру в одном сообщении
+            SendMessage message = new SendMessage();
+            message.setChatId(String.valueOf(chatId));
+            message.setReplyMarkup(inlineKeyboardMarkup);
+
+            // Добавляем информацию о записях в текст сообщения
+            message.setText("Нажмите на ту запись, которую хотите удалить:\n" + String.join("\n", appointmentInfoList));
+
+            try {
+                execute(message);
+            } catch (TelegramApiException e) {
+                e.printStackTrace();
+            }
+        } else {
+            // Если записей нет, отправляем сообщение об этом
+            sendMessage(String.valueOf(chatId), "Нет записей для удаления.");
+            sendProcedureMenu(chatId);
+        }
+    }
+
+
+
+
+
+
     private void sendMyAppointmentsMenu(long chatId, List<Appointment> appointments) {
         InlineKeyboardMarkup inlineKeyboardMarkup = new InlineKeyboardMarkup();
         List<List<InlineKeyboardButton>> rows = new ArrayList<>();
 
+        if (appointments.isEmpty()) {
+            sendMessage(String.valueOf(chatId), "У вас нет записей.");
+             sendProcedureMenu(chatId);
+            return;
+        }
+
         for (Appointment appointment : appointments) {
             List<InlineKeyboardButton> row = new ArrayList<>();
-            InlineKeyboardButton button = new InlineKeyboardButton();
-            button.setText(formatAppointmentInfo(appointment));
-            button.setCallbackData("deleteAppointment:" + appointment.getId());
-            row.add(button);
+
+            // Создаем строку для вывода информации о записи
+            String appointmentInfo = String.format("%s %s", appointment.getDate(), appointment.getTime());
+
+            // Выводим информацию о записи
+            InlineKeyboardButton infoButton = new InlineKeyboardButton();
+            infoButton.setText(appointmentInfo);
+            infoButton.setCallbackData("viewAppointment:" + appointment.getId()); // Изменили CallbackData
+            row.add(infoButton);
+
             rows.add(row);
         }
 
@@ -606,13 +815,54 @@ public class MyTelegramBotApi {
         }
     }
 
-    private String formatAppointmentInfo(Appointment appointment) {
-        String info = String.format("%s %s %s", appointment.getDate(), appointment.getTime(), appointment.getProcedureType());
+    private void sendAppointmentDetails(long chatId, Appointment appointment) {
+        String detailsText;
+
+        // Проверяем, является ли процедура "Дизайн ногтей"
         if ("Дизайн ногтей".equals(appointment.getProcedureType())) {
-            info += " (" + appointment.getNailCount() + " ногтей)";
+            // Если да, то включаем информацию о количестве ногтей
+            detailsText = String.format("Вы записаны на %s %s. Процедура: %s. Количество ногтей: %d",
+                    appointment.getDate(), appointment.getTime(), appointment.getProcedureType(), appointment.getNailCount());
+        } else {
+            // Если нет, то выводим только название процедуры
+            detailsText = String.format("Вы записаны на %s %s. Процедура: %s",
+                    appointment.getDate(), appointment.getTime(), appointment.getProcedureType());
         }
-        return info;
+
+        SendMessage message = new SendMessage();
+        message.setChatId(String.valueOf(chatId));
+        message.setText(detailsText);
+
+        try {
+            execute(message);
+            // После отправки подробной информации, отправляем основное меню
+            sendProcedureMenu(chatId);
+        } catch (TelegramApiException e) {
+            e.printStackTrace();
+        }
     }
+
+
+    private void handleViewAppointment(long chatId, Long appointmentId) {
+        // Получите запись по ID из базы данных или хранилища
+        Optional<Appointment> optionalAppointment = appointmentService.getAppointmentById(appointmentId);
+
+        // Проверьте, присутствует ли запись в Optional
+        if (optionalAppointment.isPresent()) {
+            // Получите объект Appointment из Optional
+            Appointment appointment = optionalAppointment.get();
+            sendAppointmentDetails(chatId, appointment);
+        } else {
+            sendMessage(String.valueOf(chatId), "Ошибка: запись не найдена.");
+        }
+    }
+
+
+
+
+
+
+
 
     private void handleDeleteAppointment(long chatId, Long appointmentId) {
         appointmentService.deleteAppointment(appointmentId);
@@ -620,6 +870,11 @@ public class MyTelegramBotApi {
         List<Appointment> userAppointments = appointmentService.getAppointmentsByUserId(chatId);
         sendMyAppointmentsMenu(chatId, userAppointments);
     }
+
+
+
+
+
 
 
     public void handleMakeAppointmentCommand(long chatId) throws TelegramApiException {
@@ -727,19 +982,20 @@ public class MyTelegramBotApi {
             // Проверяем, записан ли пользователь на выбранное время
             Optional<Appointment> optionalAppointment = appointmentService.findAvailableAppointment(selectedDate, time);
 
-            if (optionalAppointment.isPresent() && optionalAppointment.get().getUserId() != null && optionalAppointment.get().getUserId().equals(user.getId())) {
+            if (optionalAppointment.isPresent() && optionalAppointment.get().getChatId() != null && optionalAppointment.get().getChatId().equals(chatId)) {
                 // Если пользователь уже записан, выведите сообщение об этом
                 String message = String.format("Вы уже записаны на маникюр! Ваша ячейка зарезервирована на: %s в %s",
                         selectedDate, selectedTime);
                 sendMessage(String.valueOf(chatId), message);
             } else {
                 // Пользователь не записан, продолжаем логику
-                boolean success = appointmentService.makeAppointment(username, selectedDateTime, userService, procedureType, nailCount);
+                boolean success = appointmentService.makeAppointment(chatId, selectedDateTime, userService, procedureType, nailCount);
 
                 if (success) {
                     String message = String.format("Вы успешно записаны на маникюр! Ваша ячейка зарезервирована на: %s в %s",
                             selectedDate, selectedTime);
                     sendMessage(String.valueOf(chatId), message);
+                    sendProcedureMenu(chatId);
                 } else {
                     sendMessage(String.valueOf(chatId), "Извините, выбранное время уже занято. Пожалуйста, выберите другое время.");
                 }
@@ -752,7 +1008,8 @@ public class MyTelegramBotApi {
 
 
 
-        public void sendInlineDateKeyboard(long chatId, String text, List<LocalDate> dates) {
+
+    public void sendInlineDateKeyboard(long chatId, String text, List<LocalDate> dates) {
             SendMessage message = new SendMessage();
             message.setChatId(String.valueOf(chatId));
             message.setText(text);

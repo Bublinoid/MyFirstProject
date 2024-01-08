@@ -112,38 +112,44 @@ public class AppointmentService {
 
 
     @Transactional
-    public boolean makeAppointment(String username, LocalDateTime selectedDateTime, UserService userService, String procedureType, Integer nailCount) {
-        // Пользователь будет создан или найден
-        User user = userService.createUserIfNotExist("FirstName", "LastName", username);
-
+    public boolean makeAppointment(long chatId, LocalDateTime selectedDateTime, UserService userService, String procedureType, Integer nailCount) {
+        User user = userService.createUserIfNotExist("FirstName", "LastName", String.valueOf(chatId));
         LocalDate selectedDate = selectedDateTime.toLocalDate();
+        LocalTime selectedTime = selectedDateTime.toLocalTime();
 
-        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("HH:mm");
-        String selectedTimeString = selectedDateTime.toLocalTime().format(formatter);
+        // Логирование для проверки значений chatId и других параметров
+        logger.info("Trying to make an appointment for user {} on date {} at time {}", chatId, selectedDate, selectedTime);
 
         // Проверяем, свободно ли выбранное время
-        if (isTimeSlotAvailable(selectedDate.toString(), selectedTimeString)) {
+        if (isTimeSlotAvailable(selectedDate.toString(), selectedTime.toString())) {
             // Получаем список занятых времен для выбранной даты
             List<LocalTime> occupiedTimes = getOccupiedTimesForDate(selectedDate);
 
             // Проверяем, что выбранное время не входит в список занятых
-            if (!occupiedTimes.contains(selectedDateTime.toLocalTime())) {
+            if (!occupiedTimes.contains(selectedTime)) {
                 // Если время свободно, резервируем его
-                appointmentRepository.reserveTimeSlot(selectedDate, user.getId(), LocalTime.parse(selectedTimeString), procedureType, nailCount);
+                appointmentRepository.reserveTimeSlot(selectedDate, chatId, selectedTime, procedureType, nailCount);
 
                 // Теперь создадим новую запись в базе данных
                 Appointment newAppointment = new Appointment();
                 newAppointment.setDate(selectedDate);
-                newAppointment.setTime(LocalTime.parse(selectedTimeString));
-                newAppointment.setUserId(user.getId());
+                newAppointment.setTime(selectedTime);
+                newAppointment.setChatId(chatId);
                 newAppointment.setProcedureType(procedureType);
                 newAppointment.setNailCount(nailCount);
+
+                // Логирование для проверки значений chatId и других параметров перед сохранением
+                logger.info("Saving appointment with user {} on date {} at time {}", chatId, selectedDate, selectedTime);
+
                 appointmentRepository.save(newAppointment);
+
+                // Логирование для проверки успешного сохранения
+                logger.info("Appointment saved successfully");
 
                 return true;
             } else {
                 // Выводим сообщение, если выбранное время занято
-                System.out.println("Извините, выбранное время уже занято. Пожалуйста, выберите другое время.");
+                logger.info("Time {} on date {} is already occupied or unavailable", selectedTime, selectedDate);
                 return false;
             }
         } else {
@@ -152,9 +158,15 @@ public class AppointmentService {
     }
 
 
+
+
     public Optional<Appointment> findAvailableAppointment(LocalDate selectedDate, LocalTime selectedTime) {
         Appointment appointment = appointmentRepository.findAvailableAppointment(selectedDate, selectedTime);
         return Optional.ofNullable(appointment);
+    }
+
+    public Optional<Appointment> getAppointmentById(Long appointmentId) {
+        return appointmentRepository.findById(appointmentId);
     }
 
     public List<Appointment> getAppointmentsByUserId(Long userId) {
