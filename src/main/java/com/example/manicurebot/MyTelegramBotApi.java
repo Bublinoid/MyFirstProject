@@ -18,9 +18,7 @@ import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.CallbackQuery;
-import org.telegram.telegrambots.meta.api.objects.Chat;
 import org.telegram.telegrambots.meta.api.objects.Message;
-import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardMarkup;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
@@ -341,127 +339,205 @@ public class MyTelegramBotApi {
                 "\nhttps://t.me/evaaasik");
     }
 
-    private void sendMessage(String chatId, String text) {
-        try {
-            String url = baseUrl + "/sendMessage";
-            String requestBody = "chat_id=" + chatId + "&text=" + URLEncoder.encode(text, String.valueOf(StandardCharsets.UTF_8));
+        private void sendMessage(String chatId, String text) {
+            try {
+                String url = baseUrl + "/sendMessage";
+                String requestBody = "chat_id=" + chatId + "&text=" + URLEncoder.encode(text, String.valueOf(StandardCharsets.UTF_8));
 
-            System.out.println("Request Body: " + requestBody);
+                System.out.println("Request Body: " + requestBody);
 
-            URL urlObject = new URL(url);
-            HttpURLConnection connection = (HttpURLConnection) urlObject.openConnection();
-            connection.setRequestMethod("POST");
-            connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8");
-            connection.setDoOutput(true);
+                URL urlObject = new URL(url);
+                HttpURLConnection connection = (HttpURLConnection) urlObject.openConnection();
+                connection.setRequestMethod("POST");
+                connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8");
+                connection.setDoOutput(true);
 
-            try (DataOutputStream dos = new DataOutputStream(connection.getOutputStream())) {
-                byte[] input = requestBody.getBytes("utf-8");
-                dos.write(input, 0, input.length);
-            }
-
-            int responseCode = connection.getResponseCode();
-            System.out.println("Response Code: " + responseCode);
-
-            if (responseCode == HttpURLConnection.HTTP_OK) {
-                try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()))) {
-                    StringBuilder response = new StringBuilder();
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                        response.append(line);
-                    }
-                    System.out.println("Response Body: " + response);
+                try (DataOutputStream dos = new DataOutputStream(connection.getOutputStream())) {
+                    byte[] input = requestBody.getBytes("utf-8");
+                    dos.write(input, 0, input.length);
                 }
-            } else {
-                try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getErrorStream()))) {
-                    StringBuilder errorResponse = new StringBuilder();
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                        errorResponse.append(line);
+
+                int responseCode = connection.getResponseCode();
+                System.out.println("Response Code: " + responseCode);
+
+                if (responseCode == HttpURLConnection.HTTP_OK) {
+                    try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()))) {
+                        StringBuilder response = new StringBuilder();
+                        String line;
+                        while ((line = reader.readLine()) != null) {
+                            response.append(line);
+                        }
+                        System.out.println("Response Body: " + response);
                     }
-                    System.out.println("Error Response: " + errorResponse);
+                } else {
+                    try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getErrorStream()))) {
+                        StringBuilder errorResponse = new StringBuilder();
+                        String line;
+                        while ((line = reader.readLine()) != null) {
+                            errorResponse.append(line);
+                        }
+                        System.out.println("Error Response: " + errorResponse);
+                    }
                 }
+            } catch (IOException e) {
+                e.printStackTrace();
             }
-        } catch (IOException e) {
-            e.printStackTrace();
         }
-    }
-    public void handleInlineCallbackQuery(Update update) throws TelegramApiException {
-        CallbackQuery callbackQuery = update.getCallbackQuery();
-
-        if (callbackQuery != null) {
-            String data = callbackQuery.getData();
-
-            if (data != null && data.startsWith("selectDate:")) {
-                String selectedDateString = data.replace("selectDate:", "");
-                long chatId = callbackQuery.getMessage().getChatId();
-
-                handleSelectedDate(chatId, selectedDateString, callbackQuery);
-            }
-        } else {
-            System.out.println("CallbackQuery is null");
-        }
-    }
-
 
     public void handleCallbackQuery(CallbackQuery callbackQuery) {
         long chatId = callbackQuery.getMessage().getChatId();
         String data = callbackQuery.getData();
 
-        if (data.startsWith("selectDate:")) {
+        if (data.startsWith("procedure:")) {
+            handleProcedureSelection(chatId, data.replace("procedure:", ""));
+        } else if (data.startsWith("manicure:")) {
+            handleManicureProcedureSelection(chatId, data.replace("manicure:", ""));
+        } else if (data.startsWith("selectDate:")) {
             String selectedDateStr = data.replace("selectDate:", "");
             selectedDate = LocalDate.parse(selectedDateStr);
             handleSelectedDate(chatId, selectedDateStr, callbackQuery);
         } else if (data.startsWith("selectedTime:")) {
             String selectedTime = data.replace("selectedTime:", "");
             String username = callbackQuery.getMessage().getChat().getUserName();
-            handleSelectedTime(chatId, selectedTime, username, selectedDate); // Передайте username и selectedDate
+            handleSelectedTime(chatId, selectedTime, username, selectedDate);
         }
     }
 
 
-
-    public void handleSelectedDatePair(long chatId, String selectedDatePair) throws TelegramApiException {
-        logger.debug("Selected date pair: {}", selectedDatePair);
-
-        String[] datePair = selectedDatePair.split(" и ");
-
-        LocalDate startDate = LocalDate.parse(datePair[0]);
-        LocalDate endDate = LocalDate.parse(datePair[1]);
-
-        List<LocalTime> availableTimes = appointmentService.getAvailableTimesForDate(startDate);
-
-        List<List<InlineKeyboardButton>> keyboardButtons = new ArrayList<>();
-
-        for (LocalTime time : availableTimes) {
-            InlineKeyboardButton button = new InlineKeyboardButton();
-            button.setText(time.toString());
-            button.setCallbackData("selectedTime:" + time.toString());
-            List<InlineKeyboardButton> row = new ArrayList<>();
-            row.add(button);
-            keyboardButtons.add(row);
-        }
-
+    private void sendProcedureMenu(long chatId) {
         InlineKeyboardMarkup inlineKeyboardMarkup = new InlineKeyboardMarkup();
-        inlineKeyboardMarkup.setKeyboard(keyboardButtons);
+        List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+
+        InlineKeyboardButton manicureButton = new InlineKeyboardButton();
+        manicureButton.setText("Записаться на маникюр");
+        manicureButton.setCallbackData("procedure:manicure");
+
+        InlineKeyboardButton myAppointmentsButton = new InlineKeyboardButton();
+        myAppointmentsButton.setText("Мои записи");
+        myAppointmentsButton.setCallbackData("procedure:my_appointments");
+
+        List<InlineKeyboardButton> row1 = new ArrayList<>();
+        row1.add(manicureButton);
+
+        List<InlineKeyboardButton> row2 = new ArrayList<>();
+        row2.add(myAppointmentsButton);
+
+        rows.add(row1);
+        rows.add(row2);
+
+        inlineKeyboardMarkup.setKeyboard(rows);
 
         SendMessage message = new SendMessage();
         message.setChatId(String.valueOf(chatId));
-        message.setText("Выберите время:");
+        message.setText("Выберите действие:");
         message.setReplyMarkup(inlineKeyboardMarkup);
 
-        execute(message);
+        try {
+            execute(message);
+        } catch (TelegramApiException e) {
+            e.printStackTrace();
+        }
+    }
+    private void sendManicureProcedureMenu(long chatId) {
+        InlineKeyboardMarkup inlineKeyboardMarkup = new InlineKeyboardMarkup();
+        List<List<InlineKeyboardButton>> rows = new ArrayList<>();
 
-        System.out.println("Message with inline time keyboard executed");
+        // Здесь добавьте кнопки для каждой процедуры маникюра
+        InlineKeyboardButton complexManicureButton = new InlineKeyboardButton();
+        complexManicureButton.setText("Комплексный маникюр");
+        complexManicureButton.setCallbackData("manicure:complex");
+
+        InlineKeyboardButton combinedManicureButton = new InlineKeyboardButton();
+        combinedManicureButton.setText("Комбинированный маникюр");
+        combinedManicureButton.setCallbackData("manicure:combined");
+
+        InlineKeyboardButton spaManicureButton = new InlineKeyboardButton();
+        spaManicureButton.setText("Спа для рук");
+        spaManicureButton.setCallbackData("manicure:spa");
+
+        InlineKeyboardButton frenchManicureButton = new InlineKeyboardButton();
+        frenchManicureButton.setText("Фрэнч");
+        frenchManicureButton.setCallbackData("manicure:french");
+
+        InlineKeyboardButton nailDesignButton = new InlineKeyboardButton();
+        nailDesignButton.setText("Дизайн ногтя");
+        nailDesignButton.setCallbackData("manicure:nail_design");
+
+        List<InlineKeyboardButton> row1 = new ArrayList<>();
+        row1.add(complexManicureButton);
+
+        List<InlineKeyboardButton> row2 = new ArrayList<>();
+        row2.add(combinedManicureButton);
+
+        List<InlineKeyboardButton> row3 = new ArrayList<>();
+        row3.add(spaManicureButton);
+
+        List<InlineKeyboardButton> row4 = new ArrayList<>();
+        row4.add(frenchManicureButton);
+
+        List<InlineKeyboardButton> row5 = new ArrayList<>();
+        row5.add(nailDesignButton);
+
+        rows.add(row1);
+        rows.add(row2);
+        rows.add(row3);
+        rows.add(row4);
+        rows.add(row5);
+
+        inlineKeyboardMarkup.setKeyboard(rows);
+
+        SendMessage message = new SendMessage();
+        message.setChatId(String.valueOf(chatId));
+        message.setText("Выберите вид маникюра:");
+        message.setReplyMarkup(inlineKeyboardMarkup);
+
+        try {
+            execute(message);
+        } catch (TelegramApiException e) {
+            e.printStackTrace();
+        }
+    }
+    private void handleProcedureSelection(long chatId, String procedure) {
+        if (procedure.equals("manicure")) {
+            sendManicureProcedureMenu(chatId);
+            userStatusService.setUserStatus(chatId, UserStatus.WAITING_FOR_PROCEDURE_SELECTION);
+        } else if (procedure.equals("my_appointments")) {
+            // Здесь добавьте логику для вывода списка записей пользователя
+        }
     }
 
-
+    private void handleManicureProcedureSelection(long chatId, String manicureType) {
+        // Здесь добавьте логику для обработки выбора конкретного вида маникюра
+        if (manicureType.equals("complex")) {
+            // Логика для комплексного маникюра
+            userStatusService.setUserStatus(chatId, UserStatus.WAITING_FOR_DATE);
+            getAvailableDates(chatId);  // Можно также вызвать ваш существующий метод
+        } else if (manicureType.equals("combined")) {
+            // Логика для комбинированного маникюра
+            userStatusService.setUserStatus(chatId, UserStatus.WAITING_FOR_DATE);
+            getAvailableDates(chatId);
+        } else if (manicureType.equals("spa")) {
+            // Логика для спа-маникюра
+            userStatusService.setUserStatus(chatId, UserStatus.WAITING_FOR_DATE);
+            getAvailableDates(chatId);
+        } else if (manicureType.equals("french")) {
+            // Логика для фрэнча
+            userStatusService.setUserStatus(chatId, UserStatus.WAITING_FOR_DATE);
+            getAvailableDates(chatId);
+        } else if (manicureType.equals("nail_design")) {
+            // Логика для дизайна ногтя
+            // Здесь можно добавить логику для выбора количества ногтей и вывода списка дат
+        }
+    }
 
 
 
 
     public void handleMakeAppointmentCommand(long chatId) throws TelegramApiException {
-        userStatusService.setUserStatus(chatId, UserStatus.WAITING_FOR_DATE);
         userStatusService.setUserCommand(chatId, "/make_an_appointment");
+
+        sendProcedureMenu(chatId);
+        userStatusService.setUserStatus(chatId, UserStatus.WAITING_FOR_PROCEDURE_SELECTION);
 
         List<LocalDate> availableDates = appointmentService.getAvailableDates();
 
@@ -486,79 +562,100 @@ public class MyTelegramBotApi {
         execute(message);
 
         System.out.println("Message with inline date keyboard executed");
+        System.out.println("Entering handleMakeAppointmentCommand method");
+
     }
 
-    public void handleSelectedDate(long chatId, String selectedDate, CallbackQuery callbackQuery) {
-        System.out.println("Selected date: " + selectedDate);
+        public void handleSelectedDate(long chatId, String selectedDate, CallbackQuery callbackQuery) {
+            System.out.println("Selected date: " + selectedDate);
+            System.out.println("Entering handleSelectedDate method");
 
-        if (callbackQuery != null) {
-            Message message = callbackQuery.getMessage();
-            if (message != null) {
-                System.out.println("Message ID: " + message.getMessageId());
+            if (callbackQuery != null) {
+                Message message = callbackQuery.getMessage();
+                if (message != null) {
+                    System.out.println("Message ID: " + message.getMessageId());
 
-                // Преобразуйте строку selectedDate в объект LocalDate
-                LocalDate selectedLocalDate = LocalDate.parse(selectedDate);
+                    // Преобразуйте строку selectedDate в объект LocalDate
+                    LocalDate selectedLocalDate = LocalDate.parse(selectedDate);
 
-                // Получите имя пользователя из чата
-                String username = message.getChat().getUserName();
+                    // Получите имя пользователя из чата
+                    String username = message.getChat().getUserName();
 
-                // Получите объект пользователя по имени пользователя из вашего сервиса пользователя
-                User user = userService.getUserByUsername(username);
+                    // Получите объект пользователя по имени пользователя из вашего сервиса пользователя
+                    User user = userService.getUserByUsername(username);
 
-                if (user != null) {
-                    // Отправка списка доступного времени с использованием inline-клавиатуры
-                    List<List<InlineKeyboardButton>> keyboardButtons = new ArrayList<>();
-                    List<LocalTime> availableTimes = appointmentService.getAvailableTimesForDate(selectedLocalDate);
+                    if (user != null) {
+                        // Отправка списка доступного времени с использованием inline-клавиатуры
+                        List<List<InlineKeyboardButton>> keyboardButtons = new ArrayList<>();
+                        List<LocalTime> availableTimes = appointmentService.getAvailableTimesForDate(selectedLocalDate);
 
-                    for (LocalTime time : availableTimes) {
-                        InlineKeyboardButton button = new InlineKeyboardButton();
-                        button.setText(time.toString());
-                        button.setCallbackData("selectedTime:" + time);
-                        List<InlineKeyboardButton> row = new ArrayList<>();
-                        row.add(button);
-                        keyboardButtons.add(row);
-                    }
+                        for (LocalTime time : availableTimes) {
+                            InlineKeyboardButton button = new InlineKeyboardButton();
+                            button.setText(time.toString());
+                            button.setCallbackData("selectedTime:" + time);
+                            List<InlineKeyboardButton> row = new ArrayList<>();
+                            row.add(button);
+                            keyboardButtons.add(row);
+                        }
 
-                    InlineKeyboardMarkup inlineKeyboardMarkup = new InlineKeyboardMarkup();
-                    inlineKeyboardMarkup.setKeyboard(keyboardButtons);
+                        InlineKeyboardMarkup inlineKeyboardMarkup = new InlineKeyboardMarkup();
+                        inlineKeyboardMarkup.setKeyboard(keyboardButtons);
 
-                    SendMessage responseMessage = new SendMessage();
-                    responseMessage.setChatId(String.valueOf(chatId));
-                    responseMessage.setText("Выберите время:");
-                    responseMessage.setReplyMarkup(inlineKeyboardMarkup);
+                        SendMessage responseMessage = new SendMessage();
+                        responseMessage.setChatId(String.valueOf(chatId));
+                        responseMessage.setText("Выберите время:");
 
-                    try {
-                        // Передайте объект пользователя и выбранную дату в метод handleSelectedTime
-                        handleSelectedTime(chatId, selectedDate, username, selectedLocalDate);
-
-                        execute(responseMessage);
-                        System.out.println("Message with inline time keyboard executed");
-                    } catch (TelegramApiException e) {
-                        e.printStackTrace();
-                        System.out.println("Error executing message with inline time keyboard");
+                        if (username != null) {
+                            try {
+                                responseMessage.setReplyMarkup(inlineKeyboardMarkup);
+                                execute(responseMessage);
+                                System.out.println("Message with inline time keyboard executed");
+                            } catch (TelegramApiException e) {
+                                e.printStackTrace();
+                                System.out.println("Error executing message with inline time keyboard");
+                            }
+                        } else {
+                            System.out.println("User is null");
+                        }
+                    } else {
+                        System.out.println("User is null");
                     }
                 } else {
-                    System.out.println("User is null");
+                    System.out.println("Message is null");
                 }
             } else {
-                System.out.println("Message is null");
+                System.out.println("CallbackQuery is null");
             }
-        } else {
-            System.out.println("CallbackQuery is null");
         }
-    }
-
 
     public void handleSelectedTime(long chatId, String selectedTime, String username, LocalDate selectedDate) {
+        System.out.println("Entering handleSelectedTime method");
+        System.out.println("Selected time: " + selectedTime);
+
         if (username != null) {
+            User user = userService.createUserIfNotExist("FirstName", "LastName", username);
             LocalTime time = LocalTime.parse(selectedTime, DateTimeFormatter.ISO_LOCAL_TIME);
             LocalDateTime selectedDateTime = LocalDateTime.of(selectedDate, time);
-            boolean success = appointmentService.makeAppointment(username, selectedDateTime);
 
-            if (success) {
-                sendMessage(String.valueOf(chatId), "Вы успешно записаны на маникюр!");
+            // Проверяем, записан ли пользователь на выбранное время
+            Optional<Appointment> optionalAppointment = appointmentService.findAvailableAppointment(selectedDate, time);
+
+            if (optionalAppointment.isPresent() && optionalAppointment.get().getUserId() != null && optionalAppointment.get().getUserId().equals(user.getId())) {
+                // Если пользователь уже записан, выведите сообщение об этом
+                String message = String.format("Вы уже записаны на маникюр! Ваша ячейка зарезервирована на: %s в %s",
+                        selectedDate, selectedTime);
+                sendMessage(String.valueOf(chatId), message);
             } else {
-                sendMessage(String.valueOf(chatId), "Извините, выбранное время уже занято. Пожалуйста, выберите другое время.");
+                // Пользователь не записан, продолжаем логику
+                boolean success = appointmentService.makeAppointment(username, selectedDateTime, userService);
+
+                if (success) {
+                    String message = String.format("Вы успешно записаны на маникюр! Ваша ячейка зарезервирована на: %s в %s",
+                            selectedDate, selectedTime);
+                    sendMessage(String.valueOf(chatId), message);
+                } else {
+                    sendMessage(String.valueOf(chatId), "Извините, выбранное время уже занято. Пожалуйста, выберите другое время.");
+                }
             }
         } else {
             sendMessage(String.valueOf(chatId), "Извините, произошла ошибка. Пожалуйста, повторите попытку.");
@@ -568,158 +665,115 @@ public class MyTelegramBotApi {
 
 
 
+        public void sendInlineDateKeyboard(long chatId, String text, List<LocalDate> dates) {
+            SendMessage message = new SendMessage();
+            message.setChatId(String.valueOf(chatId));
+            message.setText(text);
 
-    private boolean isTimeSlotAvailable(String selectedDateString, String selectedTimeString) {
-        LocalTime selectedTime = LocalTime.parse(selectedTimeString, DateTimeFormatter.ISO_LOCAL_TIME);
+            InlineKeyboardMarkup inlineKeyboardMarkup = new InlineKeyboardMarkup();
+            List<List<InlineKeyboardButton>> rows = new ArrayList<>();
 
-        if (selectedTime.isBefore(LocalTime.of(10, 0)) || selectedTime.isAfter(LocalTime.of(17, 0))) {
-            return false;
-        }
-        Appointment existingAppointment = appointmentRepository.findAvailableAppointment(selectedDateString, selectedTimeString);
-        return existingAppointment == null;
-    }
+            for (LocalDate date : dates) {
+                List<InlineKeyboardButton> row = new ArrayList<>();
+                InlineKeyboardButton button = new InlineKeyboardButton();
+                button.setText(date.toString());
+                button.setCallbackData("selectDate:" + date.format(DateTimeFormatter.ISO_LOCAL_DATE));
+                row.add(button);
+                rows.add(row);
+            }
+            inlineKeyboardMarkup.setKeyboard(rows);
+            message.setReplyMarkup(inlineKeyboardMarkup);
 
-        public boolean makeAppointment(com.example.manicurebot.User user, LocalDateTime selectedDateTime) {
-            String selectedDateString = selectedDateTime.toLocalDate().toString();
-            String selectedTimeString = selectedDateTime.toLocalTime().toString();
-
-            if (isTimeSlotAvailable(selectedDateString, selectedTimeString)) {
-                appointmentRepository.reserveTimeSlot(selectedDateString, String.valueOf(user.getId()), selectedTimeString);
-                return true;
-            } else {
-                return false;
+            try {
+                execute(message);
+                System.out.println("Message with inline keyboard executed successfully");
+            } catch (TelegramApiException e) {
+                e.printStackTrace();
+                System.out.println("Error executing message with inline keyboard");
             }
         }
 
-    public List<String> getOccupiedTimesForDate(LocalDate selectedDate) {
-        String selectedDateString = selectedDate.toString();
-        return appointmentRepository.getOccupiedTimesForDate(selectedDateString);
-    }
 
 
 
-    public void sendInlineDateKeyboard(long chatId, String text, List<LocalDate> dates) {
-        SendMessage message = new SendMessage();
-        message.setChatId(String.valueOf(chatId));
-        message.setText(text);
-
-        InlineKeyboardMarkup inlineKeyboardMarkup = new InlineKeyboardMarkup();
-        List<List<InlineKeyboardButton>> rows = new ArrayList<>();
-
-        for (LocalDate date : dates) {
-            List<InlineKeyboardButton> row = new ArrayList<>();
-            InlineKeyboardButton button = new InlineKeyboardButton();
-            button.setText(date.toString());
-            button.setCallbackData("selectDate:" + date.format(DateTimeFormatter.ISO_LOCAL_DATE));
-            row.add(button);
-            rows.add(row);
-        }
-        inlineKeyboardMarkup.setKeyboard(rows);
-        message.setReplyMarkup(inlineKeyboardMarkup);
-
-        try {
-            execute(message);
-            System.out.println("Message with inline keyboard executed successfully");
-        } catch (TelegramApiException e) {
-            e.printStackTrace();
-            System.out.println("Error executing message with inline keyboard");
-        }
-    }
-
-
-
-
-    public List<LocalDate> getAvailableDates() {
-            List<LocalDate> availableDates = appointmentRepository.getAvailableDates();
-
-            return availableDates != null ? availableDates : Collections.emptyList();
+        public void getAvailableDates(long chatId) {
+                userStatusService.setUserStatus(chatId, UserStatus.WAITING_FOR_PROCEDURE_SELECTION);
+                List<LocalDate> availableDates = appointmentRepository.getAvailableDates();
         }
 
 
 
 
+        private void execute(SendMessage message) throws TelegramApiException {
+            String url = baseUrl + "/sendMessage";
+            String chatId = message.getChatId().toString();
+            String text = message.getText();
 
+            try {
+                URL urlObject = new URL(url);
+                HttpURLConnection connection = (HttpURLConnection) urlObject.openConnection();
+                connection.setRequestMethod("POST");
+                connection.setRequestProperty("Content-Type", "application/json");
+                connection.setDoOutput(true);
 
-    //    private void sendReplyKeyboard(long chatId, String text, ReplyKeyboardMarkup keyboardMarkup) {
-    //        SendMessage message = new SendMessage();
-    //        message.setChatId(String.valueOf(chatId));
-    //        message.setText(text);
-    //        message.setReplyMarkup(keyboardMarkup);
-    //
-    //        execute(message);
-    //    }
+                JsonObject requestBody = new JsonObject();
+                requestBody.addProperty("chat_id", chatId);
+                requestBody.addProperty("text", text);
 
+                if (message.getReplyMarkup() instanceof InlineKeyboardMarkup) {
+                    InlineKeyboardMarkup inlineKeyboardMarkup = (InlineKeyboardMarkup) message.getReplyMarkup();
 
-    private void execute(SendMessage message) throws TelegramApiException {
-        String url = baseUrl + "/sendMessage";
-        String chatId = message.getChatId().toString();
-        String text = message.getText();
-
-        try {
-            URL urlObject = new URL(url);
-            HttpURLConnection connection = (HttpURLConnection) urlObject.openConnection();
-            connection.setRequestMethod("POST");
-            connection.setRequestProperty("Content-Type", "application/json");
-            connection.setDoOutput(true);
-
-            JsonObject requestBody = new JsonObject();
-            requestBody.addProperty("chat_id", chatId);
-            requestBody.addProperty("text", text);
-
-            if (message.getReplyMarkup() instanceof InlineKeyboardMarkup) {
-                InlineKeyboardMarkup inlineKeyboardMarkup = (InlineKeyboardMarkup) message.getReplyMarkup();
-
-                JsonArray keyboardArray = new JsonArray();
-                for (List<InlineKeyboardButton> row : inlineKeyboardMarkup.getKeyboard()) {
-                    JsonArray rowArray = new JsonArray();
-                    for (InlineKeyboardButton button : row) {
-                        JsonObject buttonObject = new JsonObject();
-                        buttonObject.addProperty("text", button.getText());
-                        buttonObject.addProperty("callback_data", button.getCallbackData());
-                        // Добавьте другие свойства кнопки по необходимости
-                        rowArray.add(buttonObject);
+                    JsonArray keyboardArray = new JsonArray();
+                    for (List<InlineKeyboardButton> row : inlineKeyboardMarkup.getKeyboard()) {
+                        JsonArray rowArray = new JsonArray();
+                        for (InlineKeyboardButton button : row) {
+                            JsonObject buttonObject = new JsonObject();
+                            buttonObject.addProperty("text", button.getText());
+                            buttonObject.addProperty("callback_data", button.getCallbackData());
+                            // Добавьте другие свойства кнопки по необходимости
+                            rowArray.add(buttonObject);
+                        }
+                        keyboardArray.add(rowArray);
                     }
-                    keyboardArray.add(rowArray);
+
+                    JsonObject replyMarkup = new JsonObject();
+                    replyMarkup.add("inline_keyboard", keyboardArray);
+                    requestBody.add("reply_markup", replyMarkup);
                 }
 
-                JsonObject replyMarkup = new JsonObject();
-                replyMarkup.add("inline_keyboard", keyboardArray);
-                requestBody.add("reply_markup", replyMarkup);
-            }
-
-            try (OutputStream os = connection.getOutputStream()) {
-                byte[] input = requestBody.toString().getBytes("utf-8");
-                os.write(input, 0, input.length);
-            }
-
-            int responseCode = connection.getResponseCode();
-            System.out.println("Response Code: " + responseCode);
-
-            if (responseCode == HttpURLConnection.HTTP_OK) {
-                try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()))) {
-                    StringBuilder response = new StringBuilder();
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                        response.append(line);
-                    }
-                    System.out.println("Response Body: " + response.toString());
+                try (OutputStream os = connection.getOutputStream()) {
+                    byte[] input = requestBody.toString().getBytes("utf-8");
+                    os.write(input, 0, input.length);
                 }
-            } else {
-                try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getErrorStream()))) {
-                    StringBuilder errorResponse = new StringBuilder();
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                        errorResponse.append(line);
+
+                int responseCode = connection.getResponseCode();
+                System.out.println("Response Code: " + responseCode);
+
+                if (responseCode == HttpURLConnection.HTTP_OK) {
+                    try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()))) {
+                        StringBuilder response = new StringBuilder();
+                        String line;
+                        while ((line = reader.readLine()) != null) {
+                            response.append(line);
+                        }
+                        System.out.println("Response Body: " + response.toString());
                     }
-                    System.out.println("Error Response: " + errorResponse.toString());
+                } else {
+                    try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getErrorStream()))) {
+                        StringBuilder errorResponse = new StringBuilder();
+                        String line;
+                        while ((line = reader.readLine()) != null) {
+                            errorResponse.append(line);
+                        }
+                        System.out.println("Error Response: " + errorResponse.toString());
+                    }
+                    throw new TelegramApiException("Error executing message: HTTP response code " + responseCode);
                 }
-                throw new TelegramApiException("Error executing message: HTTP response code " + responseCode);
+            } catch (IOException e) {
+                e.printStackTrace();
+                throw new TelegramApiException("Error executing message", e);
             }
-        } catch (IOException e) {
-            e.printStackTrace();
-            throw new TelegramApiException("Error executing message", e);
         }
-    }
 
 
 

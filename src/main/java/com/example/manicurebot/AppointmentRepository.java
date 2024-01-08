@@ -1,6 +1,5 @@
 package com.example.manicurebot;
 
-import com.example.manicurebot.Appointment;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -8,30 +7,38 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.List;
 
 public interface AppointmentRepository extends JpaRepository<Appointment, Long> {
 
-    @Query("UPDATE Appointment a SET a.userId = ?2 WHERE a.date = ?1 AND a.time = ?3 AND a.userId IS NULL")
+    @Query("UPDATE Appointment a SET a.userId = :userId WHERE a.date = :selectedDate AND a.time = :selectedTime AND a.userId IS NULL")
     @Modifying
     @Transactional
-    void reserveTimeSlot(String selectedDate, String userId, String selectedTime);
+    void reserveTimeSlot(
+            @Param("selectedDate") LocalDate selectedDate,
+            @Param("userId") Long userId,
+            @Param("selectedTime") LocalTime selectedTime
+    );
 
     @Query("SELECT a.time FROM Appointment a WHERE a.date = ?1 AND a.userId IS NULL")
-    List<String> getAvailableTimes(String selectedDate);
+    List<String> getAvailableTimes(@Param("selectedDate") LocalDate selectedDate);
 
-    @Query("SELECT a FROM Appointment a WHERE a.date = ?1 AND a.time = ?2 AND a.userId IS NULL")
-    Appointment findAvailableAppointment(String selectedDate, String selectedTime);
+    @Query("SELECT a FROM Appointment a WHERE a.date = :selectedDate AND a.time = :selectedTime AND a.userId IS NULL")
+    Appointment findAvailableAppointment(@Param("selectedDate") LocalDate selectedDate,
+                                         @Param("selectedTime") LocalTime selectedTime);
 
-    @Modifying
-    @Transactional
-    @Query("UPDATE Appointment a SET a.userId = ?3 WHERE a.date = ?1 AND a.time = ?2 AND a.userId IS NULL")
-    void reserveTimeSlotByDateTimeAndId(String selectedDateString, String selectedTimeString, Long id);
+
+//    @Modifying
+//    @Transactional
+//    @Query("UPDATE Appointment a SET a.userId = ?3 WHERE a.date = ?1 AND a.time = ?2 AND a.userId IS NULL")
+//    void reserveTimeSlotByDateTimeAndId(String selectedDateString, String selectedTimeString, String userId);
+
     @Query("SELECT DISTINCT a.date FROM Appointment a WHERE a.userId IS NULL")
     List<LocalDate> getAvailableDates();
     @Query("SELECT a.time FROM Appointment a WHERE a.date = ?1 AND a.userId IS NOT NULL")
-    List<String> getOccupiedTimesForDate(String selectedDate);
+    List<LocalTime> getOccupiedTimesForDate(@Param("selectedDate") LocalDate selectedDate);
     @Query("SELECT a FROM Appointment a WHERE a.date = ?1")
-    List<Appointment> getAppointmentsByDate(String selectedDate);
+    List<Appointment> getAppointmentsByDate(@Param("selectedDate") LocalDate selectedDate);
 
 }

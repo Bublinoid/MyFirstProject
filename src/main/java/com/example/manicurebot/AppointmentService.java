@@ -5,12 +5,15 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import javax.transaction.Transactional;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
@@ -29,21 +32,9 @@ public class AppointmentService {
     }
 
     public List<String> getAvailableTimes(LocalDate selectedDate) {
-        String selectedDateString = selectedDate.toString();
-        return appointmentRepository.getAvailableTimes(selectedDateString);
+        return appointmentRepository.getAvailableTimes(selectedDate);
     }
 
-    public boolean makeAppointment(User user, LocalDate selectedDate, LocalTime selectedTime) {
-        String selectedDateString = selectedDate.toString();
-        String selectedTimeString = selectedTime.toString();
-
-        if (isTimeSlotAvailable(selectedDateString, selectedTimeString)) {
-            appointmentRepository.reserveTimeSlot(selectedDateString, selectedTimeString, String.valueOf(user.getId()));
-            return true;
-        } else {
-            return false;
-        }
-    }
 
     public List<LocalDate> getAvailableDates() {
         logger.info("Вызван метод getAvailableDates()");
@@ -87,10 +78,10 @@ public class AppointmentService {
 
     public List<LocalTime> getOccupiedTimesForDate(LocalDate selectedDate) {
         // Получите из репозитория список записей на приемы на выбранную дату
-        List<Appointment> appointments = appointmentRepository.getAppointmentsByDate(selectedDate.toString());
+        List<Appointment> appointments = appointmentRepository.getAppointmentsByDate(selectedDate);
 
         List<LocalTime> occupiedTimes = appointments.stream()
-                .map(appointment -> LocalTime.parse(appointment.getTime()))
+                .map(Appointment::getTime)
                 .collect(Collectors.toList());
 
         logger.info("Занятые времена для даты {}: {}", selectedDate, occupiedTimes);
@@ -101,8 +92,8 @@ public class AppointmentService {
         LocalDate selectedDate = LocalDate.parse(selectedDateString);
         LocalTime selectedTime = LocalTime.parse(selectedTimeString);
 
-        // Проверяем, свободно ли выбранное время
-        List<String> availableTimes = getAvailableTimes(selectedDate);
+        // Получаем список доступных времен для выбранной даты
+        List<LocalTime> availableTimes = getAvailableTimesForDate(selectedDate);
 
         // Получаем список занятых времен для выбранной даты
         List<LocalTime> occupiedTimes = getOccupiedTimesForDate(selectedDate);
@@ -118,20 +109,33 @@ public class AppointmentService {
     }
 
 
+    @Transactional
+    public boolean makeAppointment(String username, LocalDateTime selectedDateTime, UserService userService) {
+        // Пользователь будет создан или найден
+        User user = userService.createUserIfNotExist("FirstName", "LastName", username);
 
-    public boolean makeAppointment(String user, LocalDateTime selectedDateTime) {
-        String selectedDateString = selectedDateTime.toLocalDate().toString();
-        String selectedTimeString = selectedDateTime.toLocalTime().toString();
+        LocalDate selectedDate = selectedDateTime.toLocalDate();
+
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("HH:mm");
+        String selectedTimeString = selectedDateTime.toLocalTime().format(formatter);
 
         // Проверяем, свободно ли выбранное время
-        if (isTimeSlotAvailable(selectedDateString, selectedTimeString)) {
+        if (isTimeSlotAvailable(selectedDate.toString(), selectedTimeString)) {
             // Получаем список занятых времен для выбранной даты
-            List<LocalTime> occupiedTimes = getOccupiedTimesForDate(selectedDateTime.toLocalDate());
+            List<LocalTime> occupiedTimes = getOccupiedTimesForDate(selectedDate);
 
             // Проверяем, что выбранное время не входит в список занятых
             if (!occupiedTimes.contains(selectedDateTime.toLocalTime())) {
                 // Если время свободно, резервируем его
-                appointmentRepository.reserveTimeSlot(selectedDateString, selectedTimeString, user);
+                appointmentRepository.reserveTimeSlot(selectedDate, Long.valueOf(String.valueOf(user.getId())), LocalTime.parse(selectedTimeString));
+
+                // Теперь создадим новую запись в базе данных
+                Appointment newAppointment = new Appointment();
+                newAppointment.setDate(selectedDate);
+                newAppointment.setTime(LocalTime.parse(selectedTimeString));
+                newAppointment.setUserId(user.getId());
+                appointmentRepository.save(newAppointment);
+
                 return true;
             } else {
                 // Выводим сообщение, если выбранное время занято
@@ -141,6 +145,12 @@ public class AppointmentService {
         } else {
             return false;
         }
+    }
+
+
+    public Optional<Appointment> findAvailableAppointment(LocalDate selectedDate, LocalTime selectedTime) {
+        Appointment appointment = appointmentRepository.findAvailableAppointment(selectedDate, selectedTime);
+        return Optional.ofNullable(appointment);
     }
 
 

@@ -5,6 +5,8 @@ import javax.persistence.GeneratedValue;
 import javax.persistence.GenerationType;
 import javax.persistence.Id;
 import javax.persistence.Column;
+import java.time.LocalDate;
+import java.time.LocalTime;
 
 @Entity
 public class Appointment {
@@ -14,10 +16,10 @@ public class Appointment {
     private Long id;
 
     @Column(name = "date")
-    private String date;
+    private LocalDate date;
 
     @Column(name = "time")
-    private String time;
+    private LocalTime time;
 
     @Column(name = "user_id")
     private Long userId;
@@ -31,19 +33,19 @@ public class Appointment {
         this.id = id;
     }
 
-    public String getDate() {
+    public LocalDate getDate() {
         return date;
     }
 
-    public void setDate(String date) {
+    public void setDate(LocalDate date) {
         this.date = date;
     }
 
-    public String getTime() {
+    public LocalTime getTime() {
         return time;
     }
 
-    public void setTime(String time) {
+    public void setTime(LocalTime time) {
         this.time = time;
     }
 
