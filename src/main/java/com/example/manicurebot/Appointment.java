@@ -7,6 +7,7 @@ import javax.persistence.Id;
 import javax.persistence.Column;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.Map;
 
 @Entity
 public class Appointment {
@@ -23,6 +24,12 @@ public class Appointment {
 
     @Column(name = "user_id")
     private Long userId;
+
+    @Column(name = "procedure_type")
+    private String procedureType;
+
+    @Column(name = "nail_count")
+    private Integer nailCount;
 
 
     public Long getId() {
@@ -55,5 +62,21 @@ public class Appointment {
 
     public void setUserId(Long userId) {
         this.userId = userId;
+    }
+
+    public void setNailCount(Integer nailCount) {
+        this.nailCount = nailCount;
+    }
+
+    public void setProcedureType(String procedureType) {
+        this.procedureType = procedureType;
+    }
+
+    public Integer getNailCount() {
+        return nailCount;
+    }
+
+    public String getProcedureType() {
+        return procedureType;
     }
 }

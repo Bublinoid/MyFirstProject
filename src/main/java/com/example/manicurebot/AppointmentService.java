@@ -22,6 +22,8 @@ public class AppointmentService {
     private final AppointmentRepository appointmentRepository;
     private final UserStatusService userStatusService;
     private final Logger logger = LoggerFactory.getLogger(AppointmentService.class);
+    private String procedureType;
+    private Integer nailCount;
 
 
     @Autowired
@@ -110,7 +112,7 @@ public class AppointmentService {
 
 
     @Transactional
-    public boolean makeAppointment(String username, LocalDateTime selectedDateTime, UserService userService) {
+    public boolean makeAppointment(String username, LocalDateTime selectedDateTime, UserService userService, String procedureType, Integer nailCount) {
         // Пользователь будет создан или найден
         User user = userService.createUserIfNotExist("FirstName", "LastName", username);
 
@@ -127,13 +129,15 @@ public class AppointmentService {
             // Проверяем, что выбранное время не входит в список занятых
             if (!occupiedTimes.contains(selectedDateTime.toLocalTime())) {
                 // Если время свободно, резервируем его
-                appointmentRepository.reserveTimeSlot(selectedDate, Long.valueOf(String.valueOf(user.getId())), LocalTime.parse(selectedTimeString));
+                appointmentRepository.reserveTimeSlot(selectedDate, user.getId(), LocalTime.parse(selectedTimeString), procedureType, nailCount);
 
                 // Теперь создадим новую запись в базе данных
                 Appointment newAppointment = new Appointment();
                 newAppointment.setDate(selectedDate);
                 newAppointment.setTime(LocalTime.parse(selectedTimeString));
                 newAppointment.setUserId(user.getId());
+                newAppointment.setProcedureType(procedureType);
+                newAppointment.setNailCount(nailCount);
                 appointmentRepository.save(newAppointment);
 
                 return true;
@@ -151,6 +155,14 @@ public class AppointmentService {
     public Optional<Appointment> findAvailableAppointment(LocalDate selectedDate, LocalTime selectedTime) {
         Appointment appointment = appointmentRepository.findAvailableAppointment(selectedDate, selectedTime);
         return Optional.ofNullable(appointment);
+    }
+
+    public List<Appointment> getAppointmentsByUserId(Long userId) {
+        return appointmentRepository.findByUserId(userId);
+    }
+
+    public void deleteAppointment(Long appointmentId) {
+        appointmentRepository.deleteById(appointmentId);
     }
 
 

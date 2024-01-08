@@ -12,14 +12,17 @@ import java.util.List;
 
 public interface AppointmentRepository extends JpaRepository<Appointment, Long> {
 
-    @Query("UPDATE Appointment a SET a.userId = :userId WHERE a.date = :selectedDate AND a.time = :selectedTime AND a.userId IS NULL")
+    @Query("UPDATE Appointment a SET a.userId = :userId, a.procedureType = :procedureType, a.nailCount = :nailCount WHERE a.date = :selectedDate AND a.time = :selectedTime AND a.userId IS NULL")
     @Modifying
     @Transactional
     void reserveTimeSlot(
             @Param("selectedDate") LocalDate selectedDate,
             @Param("userId") Long userId,
-            @Param("selectedTime") LocalTime selectedTime
+            @Param("selectedTime") LocalTime selectedTime,
+            @Param("procedureType") String procedureType,
+            @Param("nailCount") Integer nailCount
     );
+
 
     @Query("SELECT a.time FROM Appointment a WHERE a.date = ?1 AND a.userId IS NULL")
     List<String> getAvailableTimes(@Param("selectedDate") LocalDate selectedDate);
@@ -27,6 +30,9 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
     @Query("SELECT a FROM Appointment a WHERE a.date = :selectedDate AND a.time = :selectedTime AND a.userId IS NULL")
     Appointment findAvailableAppointment(@Param("selectedDate") LocalDate selectedDate,
                                          @Param("selectedTime") LocalTime selectedTime);
+
+    @Query("SELECT a FROM Appointment a WHERE a.userId = :userId")
+    List<Appointment> findByUserId(@Param("userId") Long userId);
 
 
 //    @Modifying

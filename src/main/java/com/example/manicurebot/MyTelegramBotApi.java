@@ -45,6 +45,9 @@ public class MyTelegramBotApi {
     private final String baseUrl;
     private long offset;
 
+    private String procedureType;
+    private Integer nailCount;
+
     private final FeedbackService feedbackService;
     private final UserService userService;
     private final UserStatusService userStatusService;
@@ -199,7 +202,7 @@ public class MyTelegramBotApi {
                                             sendMessage(String.valueOf(chatId), "Спасибо, что хотите оставить отзыв! Пожалуйста, напишите свой отзыв:");
                                         } else if (text.startsWith("/make_an_appointment")) {
                                             System.out.println("Received /make_an_appointment command");
-                                            handleMakeAppointmentCommand(chatId);
+                                            sendProcedureMenu(chatId);
                                         } else if (awaitingFeedback.containsKey(chatId) && awaitingFeedback.get(chatId)) {
                                             handleWriteFeedbackCommand(response.toString());
                                             awaitingFeedback.put(chatId, false);
@@ -384,7 +387,7 @@ public class MyTelegramBotApi {
             }
         }
 
-    public void handleCallbackQuery(CallbackQuery callbackQuery) {
+    public void handleCallbackQuery(CallbackQuery callbackQuery) throws TelegramApiException {
         long chatId = callbackQuery.getMessage().getChatId();
         String data = callbackQuery.getData();
 
@@ -399,7 +402,16 @@ public class MyTelegramBotApi {
         } else if (data.startsWith("selectedTime:")) {
             String selectedTime = data.replace("selectedTime:", "");
             String username = callbackQuery.getMessage().getChat().getUserName();
-            handleSelectedTime(chatId, selectedTime, username, selectedDate);
+            handleSelectedTime(chatId, selectedTime, username, selectedDate, procedureType, nailCount);
+        } else if (data.startsWith("selectNailCount:")) {
+            // Обработка выбора количества ногтей
+            String selectedNailCount = data.replace("selectNailCount:", "");
+            handleSelectedNailCount(chatId, selectedNailCount);
+        } else if (data.startsWith("deleteAppointment: ")) {
+            String appointmentIdStr = data.replace("deleteAppointment:", "");
+            Long appointmentId = Long.parseLong(appointmentIdStr);
+            handleDeleteAppointment(chatId, appointmentId);
+
         }
     }
 
@@ -460,7 +472,7 @@ public class MyTelegramBotApi {
         frenchManicureButton.setCallbackData("manicure:french");
 
         InlineKeyboardButton nailDesignButton = new InlineKeyboardButton();
-        nailDesignButton.setText("Дизайн ногтя");
+        nailDesignButton.setText("Дизайн ногтей");
         nailDesignButton.setCallbackData("manicure:nail_design");
 
         List<InlineKeyboardButton> row1 = new ArrayList<>();
@@ -497,47 +509,122 @@ public class MyTelegramBotApi {
             e.printStackTrace();
         }
     }
-    private void handleProcedureSelection(long chatId, String procedure) {
+    private void handleProcedureSelection(long userId, String procedure) {
         if (procedure.equals("manicure")) {
-            sendManicureProcedureMenu(chatId);
-            userStatusService.setUserStatus(chatId, UserStatus.WAITING_FOR_PROCEDURE_SELECTION);
+            sendManicureProcedureMenu(userId);
+            userStatusService.setUserStatus(userId, UserStatus.WAITING_FOR_PROCEDURE_SELECTION);
         } else if (procedure.equals("my_appointments")) {
+            List<Appointment> userAppointments = appointmentService.getAppointmentsByUserId(userId);
+            sendMyAppointmentsMenu(userId, userAppointments);
+            logger.info("User Appointments for userId {}: {}", userId, userAppointments);
+
+
             // Здесь добавьте логику для вывода списка записей пользователя
         }
     }
 
-    private void handleManicureProcedureSelection(long chatId, String manicureType) {
-        // Здесь добавьте логику для обработки выбора конкретного вида маникюра
+    private void handleManicureProcedureSelection(long chatId, String manicureType) throws TelegramApiException {
+
         if (manicureType.equals("complex")) {
-            // Логика для комплексного маникюра
-            userStatusService.setUserStatus(chatId, UserStatus.WAITING_FOR_DATE);
-            getAvailableDates(chatId);  // Можно также вызвать ваш существующий метод
+            procedureType = "Комплексный маникюр";
         } else if (manicureType.equals("combined")) {
-            // Логика для комбинированного маникюра
-            userStatusService.setUserStatus(chatId, UserStatus.WAITING_FOR_DATE);
-            getAvailableDates(chatId);
+            procedureType = "Комбинированный маникюр";
         } else if (manicureType.equals("spa")) {
-            // Логика для спа-маникюра
-            userStatusService.setUserStatus(chatId, UserStatus.WAITING_FOR_DATE);
-            getAvailableDates(chatId);
+            procedureType = "Спа для рук";
         } else if (manicureType.equals("french")) {
-            // Логика для фрэнча
-            userStatusService.setUserStatus(chatId, UserStatus.WAITING_FOR_DATE);
-            getAvailableDates(chatId);
+            procedureType = "Фрэнч";
         } else if (manicureType.equals("nail_design")) {
-            // Логика для дизайна ногтя
-            // Здесь можно добавить логику для выбора количества ногтей и вывода списка дат
+            procedureType = "Дизайн ногтей";
+            sendNailDesignOptions(chatId);
+            return; // Прерывание выполнения метода, так как выбран "nail_design"
+        } else {
+            // Обработка неизвестной процедуры
+            sendMessage(String.valueOf(chatId), "Неизвестная процедура");
+            return;
+        }
+        nailCount = null;
+        handleMakeAppointmentCommand(chatId);
+    }
+
+    private void sendNailDesignOptions(long chatId) {
+        InlineKeyboardMarkup inlineKeyboardMarkup = new InlineKeyboardMarkup();
+        List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+
+        for (int i = 1; i <= 5; i++) {
+            List<InlineKeyboardButton> row = new ArrayList<>();
+            InlineKeyboardButton button = new InlineKeyboardButton();
+            button.setText(String.valueOf(i));
+            button.setCallbackData("selectNailCount:" + i);
+            row.add(button);
+            rows.add(row);
+        }
+
+        inlineKeyboardMarkup.setKeyboard(rows);
+
+        SendMessage message = new SendMessage();
+        message.setChatId(String.valueOf(chatId));
+        message.setText("Выберите количество ногтей:");
+        message.setReplyMarkup(inlineKeyboardMarkup);
+
+        try {
+            execute(message);
+        } catch (TelegramApiException e) {
+            e.printStackTrace();
         }
     }
 
+    private void handleSelectedNailCount(long chatId, String selectedNailCount) throws TelegramApiException {
+        nailCount = Integer.parseInt(selectedNailCount);
+        sendMessage(String.valueOf(chatId), "Вы выбрали количество ногтей: " + nailCount);
+        handleMakeAppointmentCommand(chatId);
+    }
 
+    private void sendMyAppointmentsMenu(long chatId, List<Appointment> appointments) {
+        InlineKeyboardMarkup inlineKeyboardMarkup = new InlineKeyboardMarkup();
+        List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+
+        for (Appointment appointment : appointments) {
+            List<InlineKeyboardButton> row = new ArrayList<>();
+            InlineKeyboardButton button = new InlineKeyboardButton();
+            button.setText(formatAppointmentInfo(appointment));
+            button.setCallbackData("deleteAppointment:" + appointment.getId());
+            row.add(button);
+            rows.add(row);
+        }
+
+        inlineKeyboardMarkup.setKeyboard(rows);
+
+        SendMessage message = new SendMessage();
+        message.setChatId(String.valueOf(chatId));
+        message.setText("Ваши записи:");
+        message.setReplyMarkup(inlineKeyboardMarkup);
+
+        try {
+            execute(message);
+        } catch (TelegramApiException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private String formatAppointmentInfo(Appointment appointment) {
+        String info = String.format("%s %s %s", appointment.getDate(), appointment.getTime(), appointment.getProcedureType());
+        if ("Дизайн ногтей".equals(appointment.getProcedureType())) {
+            info += " (" + appointment.getNailCount() + " ногтей)";
+        }
+        return info;
+    }
+
+    private void handleDeleteAppointment(long chatId, Long appointmentId) {
+        appointmentService.deleteAppointment(appointmentId);
+        sendMessage(String.valueOf(chatId), "Запись удалена");
+        List<Appointment> userAppointments = appointmentService.getAppointmentsByUserId(chatId);
+        sendMyAppointmentsMenu(chatId, userAppointments);
+    }
 
 
     public void handleMakeAppointmentCommand(long chatId) throws TelegramApiException {
         userStatusService.setUserCommand(chatId, "/make_an_appointment");
 
-        sendProcedureMenu(chatId);
-        userStatusService.setUserStatus(chatId, UserStatus.WAITING_FOR_PROCEDURE_SELECTION);
 
         List<LocalDate> availableDates = appointmentService.getAvailableDates();
 
@@ -628,7 +715,7 @@ public class MyTelegramBotApi {
             }
         }
 
-    public void handleSelectedTime(long chatId, String selectedTime, String username, LocalDate selectedDate) {
+    public void handleSelectedTime(long chatId, String selectedTime, String username, LocalDate selectedDate, String procedureType, Integer nailCount) {
         System.out.println("Entering handleSelectedTime method");
         System.out.println("Selected time: " + selectedTime);
 
@@ -647,7 +734,7 @@ public class MyTelegramBotApi {
                 sendMessage(String.valueOf(chatId), message);
             } else {
                 // Пользователь не записан, продолжаем логику
-                boolean success = appointmentService.makeAppointment(username, selectedDateTime, userService);
+                boolean success = appointmentService.makeAppointment(username, selectedDateTime, userService, procedureType, nailCount);
 
                 if (success) {
                     String message = String.format("Вы успешно записаны на маникюр! Ваша ячейка зарезервирована на: %s в %s",
