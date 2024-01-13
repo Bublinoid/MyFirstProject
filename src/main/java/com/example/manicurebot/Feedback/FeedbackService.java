@@ -1,4 +1,4 @@
-package com.example.manicurebot;
+package com.example.manicurebot.Feedback;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;

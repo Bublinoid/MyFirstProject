@@ -1,5 +1,7 @@
-package com.example.manicurebot;
+package com.example.manicurebot.Appointment;
 
+import com.example.manicurebot.User.User;
+import com.example.manicurebot.User.UserService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -10,7 +12,6 @@ import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -20,23 +21,13 @@ import java.util.stream.Collectors;
 public class AppointmentService {
 
     private final AppointmentRepository appointmentRepository;
-    private final UserStatusService userStatusService;
     private final Logger logger = LoggerFactory.getLogger(AppointmentService.class);
-    private String procedureType;
-    private Integer nailCount;
-
 
     @Autowired
-    public AppointmentService(AppointmentRepository appointmentRepository, UserStatusService userStatusService) {
+    public AppointmentService(AppointmentRepository appointmentRepository) {
         this.appointmentRepository = appointmentRepository;
-        this.userStatusService = userStatusService;
 
     }
-
-    public List<String> getAvailableTimes(LocalDate selectedDate) {
-        return appointmentRepository.getAvailableTimes(selectedDate);
-    }
-
 
     public List<LocalDate> getAvailableDates() {
         logger.info("Вызван метод getAvailableDates()");
@@ -58,13 +49,7 @@ public class AppointmentService {
     }
 
 
-
-
-
     public List<LocalTime> getAvailableTimesForDate(LocalDate selectedDate) {
-        // Логика для получения доступных времен для конкретной даты
-        // Зависит от ваших требований
-        // Пример: возвращаем список времен с 10:00 до 17:00 с интервалом в 1 час
 
         List<LocalTime> availableTimes = new ArrayList<>();
         LocalTime startTime = LocalTime.of(10, 0);
@@ -79,7 +64,6 @@ public class AppointmentService {
     }
 
     public List<LocalTime> getOccupiedTimesForDate(LocalDate selectedDate) {
-        // Получите из репозитория список записей на приемы на выбранную дату
         List<Appointment> appointments = appointmentRepository.getAppointmentsByDate(selectedDate);
 
         List<LocalTime> occupiedTimes = appointments.stream()
@@ -158,8 +142,6 @@ public class AppointmentService {
     }
 
 
-
-
     public Optional<Appointment> findAvailableAppointment(LocalDate selectedDate, LocalTime selectedTime) {
         Appointment appointment = appointmentRepository.findAvailableAppointment(selectedDate, selectedTime);
         return Optional.ofNullable(appointment);
@@ -178,11 +160,5 @@ public class AppointmentService {
     }
 
 
-
-//    public List<LocalDate> getAvailableDates() {
-//        List<LocalDate> availableDates = appointmentRepository.getAvailableDates();
-//        logger.info("Available dates from repository: {}", availableDates);
-//        return availableDates != null ? availableDates : Collections.emptyList();
-//    }
 
 }

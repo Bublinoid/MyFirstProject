@@ -1,0 +1,4 @@
+app = "my-manicure-bot"
+
+[build]
+image = "my-manicure-bot-image"

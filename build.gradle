@@ -61,3 +61,7 @@ tasks.named('bootBuildImage') {
 tasks.named('test') {
     useJUnitPlatform()
 }
+
+void id(String s) {
+
+}

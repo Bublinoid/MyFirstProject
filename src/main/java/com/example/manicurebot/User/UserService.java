@@ -1,4 +1,4 @@
-package com.example.manicurebot;
+package com.example.manicurebot.User;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,6 +22,7 @@ public class UserService {
         System.out.println("User saved: " + savedUser);
         return savedUser;
     }
+
     public User createUserIfNotExist(String firstName, String lastName, String username) {
         User existingUser = userRepository.findByUsername(username);
 
@@ -39,8 +40,6 @@ public class UserService {
     }
 
 
-
-
     public User getUserByUsername(String username) {
         logger.info("Ищем пользователя с именем пользователя: {}", username);
         User user = userRepository.findByUsername(username);
@@ -56,8 +55,4 @@ public class UserService {
 
         return user;
     }
-
-
-
-    // Другие методы сервиса...
 }

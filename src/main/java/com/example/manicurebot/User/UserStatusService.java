@@ -1,4 +1,4 @@
-package com.example.manicurebot;
+package com.example.manicurebot.User;
 
 import org.springframework.stereotype.Service;
 

@@ -1,4 +1,6 @@
-package com.example.manicurebot;
+package com.example.manicurebot.Appointment;
+
+import lombok.Getter;
 
 import javax.persistence.Entity;
 import javax.persistence.GeneratedValue;
@@ -8,6 +10,10 @@ import javax.persistence.Column;
 import java.time.LocalDate;
 import java.time.LocalTime;
 
+/**
+ * Класс представляет сущность "Запись на маникюр".
+ */
+@Getter
 @Entity
 public class Appointment {
 
@@ -31,32 +37,16 @@ public class Appointment {
     private Integer nailCount;
 
 
-    public Long getId() {
-        return id;
-    }
-
     public void setId(Long id) {
         this.id = id;
-    }
-
-    public LocalDate getDate() {
-        return date;
     }
 
     public void setDate(LocalDate date) {
         this.date = date;
     }
 
-    public LocalTime getTime() {
-        return time;
-    }
-
     public void setTime(LocalTime time) {
         this.time = time;
-    }
-
-    public Long getChatId() {
-        return chatId;
     }
 
     public void setChatId(Long chatId) {
@@ -71,11 +61,4 @@ public class Appointment {
         this.procedureType = procedureType;
     }
 
-    public Integer getNailCount() {
-        return nailCount;
-    }
-
-    public String getProcedureType() {
-        return procedureType;
-    }
 }

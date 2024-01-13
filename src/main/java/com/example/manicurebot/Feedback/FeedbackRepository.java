@@ -1,4 +1,4 @@
-package com.example.manicurebot;
+package com.example.manicurebot.Feedback;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 
