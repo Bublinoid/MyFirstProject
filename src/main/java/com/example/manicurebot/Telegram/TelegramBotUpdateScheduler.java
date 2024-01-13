@@ -1,4 +1,4 @@
-package com.example.manicurebot;
+package com.example.manicurebot.Telegram;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

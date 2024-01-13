@@ -1,4 +1,4 @@
-package com.example.manicurebot;
+package com.example.manicurebot.User;
 
 public enum UserStatus {
     DEFAULT,

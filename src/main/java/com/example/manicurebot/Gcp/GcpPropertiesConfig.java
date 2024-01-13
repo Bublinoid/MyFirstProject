@@ -1,8 +1,13 @@
-package com.example.manicurebot;
+package com.example.manicurebot.Gcp;
 
+import lombok.Getter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 
+/**
+ * Конфигурационный класс для свойств GCP.
+ */
+@Getter
 @Configuration
 public class GcpPropertiesConfig {
 
@@ -16,15 +21,4 @@ public class GcpPropertiesConfig {
     private String keyPath;
 
 
-    public String getProjectId() {
-        return projectId;
-    }
-
-    public String getBucketName() {
-        return bucketName;
-    }
-
-    public String getKeyPath() {
-        return keyPath;
-    }
 }
