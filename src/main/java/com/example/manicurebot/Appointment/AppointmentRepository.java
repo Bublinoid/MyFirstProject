@@ -4,12 +4,13 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
-
+@Repository
 public interface AppointmentRepository extends JpaRepository<Appointment, Long> {
 
     @Query("UPDATE Appointment a SET a.chatId = :chatId, a.procedureType = :procedureType, a.nailCount = :nailCount WHERE a.date = :selectedDate AND a.time = :selectedTime AND a.chatId IS NULL")
