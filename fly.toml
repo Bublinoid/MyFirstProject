@@ -1,0 +1,7 @@
+app = "manicure-bot"
+
+[build]
+environment = { JAVA_TOOL_OPTIONS = "-XX:+ExitOnOutOfMemoryError" }
+
+[env]
+JAR_PATH = "./build/libs/manicure-bot-0.0.1-SNAPSHOT-plain.jar"

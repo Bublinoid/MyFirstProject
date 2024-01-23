@@ -1,8 +1,11 @@
 plugins {
     id 'java'
     id 'org.springframework.boot' version '2.5.0'
-    id 'io.spring.dependency-management' version '1.1.4'
 }
+
+apply plugin: 'io.spring.dependency-management'
+
+
 
 group = 'com.example'
 version = '0.0.1-SNAPSHOT'
@@ -42,7 +45,24 @@ dependencies {
     implementation 'org.slf4j:slf4j-api:1.7.36'
 }
 
-bootJar {
+
+springBoot {
+    buildInfo()
+}
+
+jar {
     archiveFileName = 'manicure-bot-0.0.1-SNAPSHOT-plain.jar'
-    mainClassName = 'com.example.manicurebot.ManicureBotApplication'
+    manifest {
+        attributes(
+                'Main-Class': 'com.example.manicurebot.ManicureBotApplication'
+        )
+    }
+}
+
+
+
+
+
+void id(String s) {
+
 }
