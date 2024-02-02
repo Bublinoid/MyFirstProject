@@ -6,6 +6,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+/**
+ * fixedRate instead fixedDelay, logger, exception, asynchronicity
+ */
+
 @Component
 public class TelegramBotUpdateScheduler {
 

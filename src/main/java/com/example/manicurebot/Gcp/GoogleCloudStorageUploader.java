@@ -11,6 +11,10 @@ import org.springframework.stereotype.Component;
 import javax.annotation.PostConstruct;
 import java.io.*;
 
+/**
+ * exception, logger, try-with-resources, storage
+ */
+
 @Component
 public class GoogleCloudStorageUploader {
 

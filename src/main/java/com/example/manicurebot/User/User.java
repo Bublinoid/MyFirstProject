@@ -4,6 +4,11 @@ import lombok.Getter;
 
 import javax.persistence.*;
 import java.util.Objects;
+/**
+ * "@Data instead @Getter,
+ * method toString generated auth with @Lombok,
+ * check by null
+ */
 
 @Getter
 @Entity

@@ -17,6 +17,10 @@ import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+/**
+ * logger, Single-Responsibility-Principle, cache, test
+ */
+
 @Service
 public class AppointmentService {
 

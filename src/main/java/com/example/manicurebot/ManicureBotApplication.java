@@ -5,9 +5,13 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
+/**
+ *
+ */
+
 @SpringBootApplication
 @EnableScheduling
-@EntityScan(basePackages = "com.example.manicurebot")
+@EntityScan({"com.example.manicurebot.Appointment", "com.example.manicurebot.Feedback", "com.example.manicurebot.Gcp", "com.example.manicurebot.Telegram", "com.example.manicurebot.User"})
 public class ManicureBotApplication {
 
     public static void main(String[] args) {
