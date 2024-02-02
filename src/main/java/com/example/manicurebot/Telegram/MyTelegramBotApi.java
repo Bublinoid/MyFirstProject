@@ -47,6 +47,14 @@ import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 
+/**
+ * change method getAvailableTimesForDate by 2 hours, add a discount command,
+ * add transactions, deploy postgreSQL to the server, change method processUpdate to switch-case,
+ * URL hard coding, Single-Responsibility-Principle, try-with-resources, parallelism, libraries json,
+ * const by command, security, logger, test, method handleCallbackQuery,
+ * more...more...more:)
+ */
+
 
 @Component
 public class MyTelegramBotApi {

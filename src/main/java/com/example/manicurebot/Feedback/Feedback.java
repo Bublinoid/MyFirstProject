@@ -4,9 +4,14 @@ import lombok.Getter;
 
 import javax.persistence.*;
 
+/**
+ * "@Data instead @Getter", check by null
+ */
+
 @Getter
 @Entity
 @Table(name = "feedbacks")
+
 
 public class Feedback {
 

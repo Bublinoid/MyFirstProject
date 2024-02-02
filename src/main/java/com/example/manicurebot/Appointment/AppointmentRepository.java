@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
+
 @Repository
 public interface AppointmentRepository extends JpaRepository<Appointment, Long> {
 

@@ -1,11 +1,8 @@
 plugins {
     id 'java'
     id 'org.springframework.boot' version '2.5.0'
+    id 'io.spring.dependency-management' version '1.1.4'
 }
-
-apply plugin: 'io.spring.dependency-management'
-
-
 
 group = 'com.example'
 version = '0.0.1-SNAPSHOT'
@@ -25,7 +22,11 @@ repositories {
     maven {
         url = uri("https://maven-central.storage.googleapis.com/")
     }
+    maven {
+        url "https://plugins.gradle.org/m2/"
+    }
 }
+
 
 dependencies {
     implementation 'org.springframework.boot:spring-boot-starter'
@@ -46,23 +47,12 @@ dependencies {
 }
 
 
-springBoot {
-    buildInfo()
-}
 
-jar {
+bootJar {
+    enabled = true
     archiveFileName = 'manicure-bot-0.0.1-SNAPSHOT-plain.jar'
-    manifest {
-        attributes(
-                'Main-Class': 'com.example.manicurebot.ManicureBotApplication'
-        )
-    }
+    mainClassName = 'com.example.manicurebot.ManicureBotApplication'
 }
 
 
 
-
-
-void id(String s) {
-
-}

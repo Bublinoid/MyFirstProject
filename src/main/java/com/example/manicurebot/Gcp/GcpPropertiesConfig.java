@@ -5,7 +5,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * Конфигурационный класс для свойств GCP.
+ * Конфигурационный класс для свойств GCP, exception by null, final object, security
  */
 @Getter
 @Configuration

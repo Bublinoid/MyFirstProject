@@ -5,6 +5,10 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+/**
+ * logger
+ */
+
 @Service
 public class UserService {
 
@@ -19,7 +23,7 @@ public class UserService {
     public User createUser(String firstName, String lastName, String username) {
         User newUser = new User(firstName, lastName, username);
         User savedUser = userRepository.save(newUser);
-        System.out.println("User saved: " + savedUser);
+        logger.info("User saved: " + savedUser);
         return savedUser;
     }
 
